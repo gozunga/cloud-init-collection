@@ -26,17 +26,9 @@ write_files:
 
 runcmd:
   - update-initramfs -u
-  - wget -q --show-progress -4 https://mirror.gozunga.com/nvidia/cuda-ubuntu2604.pin
-  - mv cuda-ubuntu2604.pin /etc/apt/preferences.d/cuda-repository-pin-600
-  - wget -q --show-progress -4 https://mirror.gozunga.com/nvidia/nvidia-driver-local-repo-ubuntu2604-595.71.05_1.0-1_amd64.deb
-  - dpkg -i ./nvidia-driver-local-repo-ubuntu2604-595.71.05_1.0-1_amd64.deb
-  - cp /var/nvidia-driver-local-repo-ubuntu2604-595.71.05/nvidia-driver-local-*-keyring.gpg /usr/share/keyrings/
-  - wget -q --show-progress -4 https://mirror.gozunga.com/nvidia/cuda-repo-ubuntu2604-13-3-local_13.3.0-610.43.02-1_amd64.deb
-  - dpkg -i ./cuda-repo-ubuntu2604-13-3-local_13.3.0-610.43.02-1_amd64.deb
-  - cp /var/cuda-repo-ubuntu2604-13-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
+  - add-apt-repository ppa:graphics-drivers/ppa -y
   - apt update -y
-  - apt install -y cuda-toolkit-13-3 nvidia-driver-595-open nvidia-utils-595-open nvtop
-  - rm -f *.deb
+  - apt install -y nvidia-driver-595-server-open nvtop
   - echo "NVIDIA + CUDA installation completed. Rebooting..."
 
 power_state:
