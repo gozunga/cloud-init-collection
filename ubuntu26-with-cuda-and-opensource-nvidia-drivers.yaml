@@ -6,13 +6,6 @@ autoinstall:
 package_update: true
 package_upgrade: true
 
-# Install prerequisites
-packages:
-  - wget
-  - curl
-  - gnupg
-  - software-properties-common
-
 # Create the Nouveau blacklist (critical before driver install)
 write_files:
   - path: /etc/modprobe.d/blacklist-nouveau.conf
@@ -29,7 +22,6 @@ runcmd:
   - add-apt-repository ppa:graphics-drivers/ppa -y
   - apt update -y
   - apt install -y nvidia-driver-595-server-open nvtop
-  - echo "NVIDIA + CUDA installation completed. Rebooting..."
 
 power_state:
   mode: reboot
