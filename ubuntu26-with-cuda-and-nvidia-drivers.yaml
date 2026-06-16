@@ -1,0 +1,45 @@
+#cloud-config
+autoinstall:
+  version: 1
+
+# Update/upgrade the system first
+package_update: true
+package_upgrade: true
+
+# Install prerequisites
+packages:
+  - wget
+  - curl
+  - gnupg
+  - software-properties-common
+
+# Create the Nouveau blacklist (critical before driver install)
+write_files:
+  - path: /etc/modprobe.d/blacklist-nouveau.conf
+    content: |
+      blacklist nouveau
+      blacklist lbm-nouveau
+      options nouveau modeset=0
+      alias nouveau off
+      alias lbm-nouveau off
+    permissions: '0644'
+
+runcmd:
+  - update-initramfs -u
+  - wget -4 https://mirror.gozunga.com/nvidia/cuda-ubuntu2604.pin
+  - mv cuda-ubuntu2604.pin /etc/apt/preferences.d/cuda-repository-pin-600
+  - wget -4 https://mirror.gozunga.com/nvidia/nvidia-driver-local-repo-ubuntu2604-595.71.05_1.0-1_amd64.deb
+  - dpkg -i ./nvidia-driver-local-repo-ubuntu2604-595.71.05_1.0-1_amd64.deb
+  - cp /var/nvidia-driver-local-repo-ubuntu2604-595.71.05/nvidia-driver-local-*-keyring.gpg /usr/share/keyrings/
+  - wget -4 https://mirror.gozunga.com/nvidia/cuda-repo-ubuntu2604-13-3-local_13.3.0-610.43.02-1_amd64.deb
+  - dpkg -i ./cuda-repo-ubuntu2604-13-3-local_13.3.0-610.43.02-1_amd64.deb
+  - cp /var/cuda-repo-ubuntu2604-13-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
+  - apt update -y
+  - apt install -y cuda-toolkit-13-3 nvidia-driver-595-server nvidia-utils-595-server nvtop
+  - rm -f *.deb
+  - echo "NVIDIA + CUDA installation completed. Rebooting..."
+
+power_state:
+  mode: reboot
+  message: "Rebooting to load NVIDIA drivers"
+  timeout: 2
