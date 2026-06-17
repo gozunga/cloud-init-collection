@@ -1,12 +1,7 @@
 #cloud-config
-autoinstall:
-  version: 1
-
-# Update/upgrade the system first
 package_update: true
 package_upgrade: true
 
-# Create the Nouveau blacklist (critical before driver install)
 write_files:
   - path: /etc/modprobe.d/blacklist-nouveau.conf
     content: |
