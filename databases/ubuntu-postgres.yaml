@@ -1,17 +1,51 @@
 #cloud-config
-# Ubuntu: PostgreSQL single-node starter.
+# Install PostgreSQL on Ubuntu from distro packages.
 # Creates DB/user app/app with password CHANGE_ME.
 # Listens on localhost only by default (safer). Open 5432 only if needed.
+#
+# Distro packages use Gozunga's on-net mirror for speed:
+#   https://mirror.gozunga.com/ubuntu
+
+# Point Ubuntu archive + security at the on-net Gozunga mirror before packages
+# and package_update/package_upgrade run.
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
 
 package_update: true
 package_upgrade: true
 
 packages:
   - postgresql
-  - postgresql-contrib
 
 runcmd:
+  # Belt-and-suspenders: rewrite any leftover Ubuntu apt sources to the mirror
+  # (cloud images may ship deb822 .sources files and/or classic sources.list).
+  - |
+    set -e
+    mirror='https://mirror.gozunga.com/ubuntu'
+    if [ -f /etc/apt/sources.list ]; then
+      sed -i -E \
+        -e "s|https?://([a-z0-9.-]+\.)?archive\.ubuntu\.com/ubuntu|${mirror}|g" \
+        -e "s|https?://security\.ubuntu\.com/ubuntu|${mirror}|g" \
+        -e "s|https?://([a-z0-9.-]+\.)?ports\.ubuntu\.com/ubuntu-ports|${mirror}|g" \
+        /etc/apt/sources.list
+    fi
+    if [ -d /etc/apt/sources.list.d ]; then
+      find /etc/apt/sources.list.d -type f \( -name '*.list' -o -name '*.sources' \) -print0 \
+        | xargs -0 -r sed -i -E \
+          -e "s|https?://([a-z0-9.-]+\.)?archive\.ubuntu\.com/ubuntu|${mirror}|g" \
+          -e "s|https?://security\.ubuntu\.com/ubuntu|${mirror}|g" \
+          -e "s|https?://([a-z0-9.-]+\.)?ports\.ubuntu\.com/ubuntu-ports|${mirror}|g"
+    fi
+
   - systemctl enable --now postgresql
+
+  # Create app database and user
   - |
     sudo -u postgres psql <<'SQL'
     DO $$
@@ -24,10 +58,11 @@ runcmd:
     SELECT 'CREATE DATABASE app OWNER app'
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'app')\gexec
     SQL
-  - |
-    # Optional: allow remote connections (commented for safety)
-    # echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
-    # echo "host all all 0.0.0.0/0 scram-sha-256" >> /etc/postgresql/*/main/pg_hba.conf
-    # systemctl restart postgresql
 
-final_message: "PostgreSQL ready. DB=app user=app password=CHANGE_ME (change immediately)."
+  # Optional: allow remote connections (commented for safety)
+  # - |
+  #   echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
+  #   echo "host all all 0.0.0.0/0 scram-sha-256" >> /etc/postgresql/*/main/pg_hba.conf
+  #   systemctl restart postgresql
+
+final_message: "PostgreSQL ready after $UPTIME seconds. DB=app user=app password=CHANGE_ME (change immediately). Gozunga apt mirror."

@@ -1,0 +1,15 @@
+# Contract: Docker Engine on Ubuntu via official apt repo
+name: docker-ubuntu
+example: docker/ubuntu-docker-official.yaml
+image: ubuntu-26.04
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: docker
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - docker version succeeds
+  - docker run --rm hello-world succeeds

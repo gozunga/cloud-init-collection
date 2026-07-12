@@ -1,0 +1,49 @@
+#cloud-config
+# Install Coolify on Rocky Linux using the official installer.
+#
+# Rocky's base image ships with a minimal kernel missing iptables/netfilter
+# modules. package_upgrade installs them for the new kernel, but a reboot
+# is required to load them. The Coolify installer runs post-reboot via a
+# systemd oneshot service with an unconfined SELinux context (matching an
+# interactive shell) so SELinux stays enforcing.
+#
+# After boot, open: http://<server-ip>:8000
+# Open security group ports: 8000 (mgmt), 6001/6002 (optional), 80/443 (apps)
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+
+write_files:
+  - path: /etc/systemd/system/install-coolify.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Install Coolify (post-reboot)
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=!/var/lib/coolify/.installed
+
+      [Service]
+      Type=oneshot
+      SELinuxContext=system_u:system_r:unconfined_t:s0-s0:c0.c1023
+      ExecStart=/bin/bash -c 'curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash && mkdir -p /var/lib/coolify && touch /var/lib/coolify/.installed'
+      RemainAfterExit=true
+      TimeoutStartSec=900
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable install-coolify.service
+
+power_state:
+  mode: reboot
+  message: "Rebooting to load updated kernel modules before Coolify install"
+  timeout: 30
+  condition: true
+
+final_message: "Cloud-init finished. System will reboot, then Coolify installs automatically via install-coolify.service."

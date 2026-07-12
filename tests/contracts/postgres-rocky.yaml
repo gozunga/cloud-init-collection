@@ -1,0 +1,16 @@
+# Contract: PostgreSQL on Rocky from distro packages
+name: postgres-rocky
+example: databases/rocky-postgres.yaml
+image: rocky-10
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: rocky
+probe: postgres
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - psql SELECT version() returns PostgreSQL
+  - app database exists
+  - app role exists

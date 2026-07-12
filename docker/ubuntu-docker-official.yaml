@@ -2,6 +2,20 @@
 # Install Docker Engine on Ubuntu from Docker's official apt repository.
 # Uninstalls distro Docker packages first to avoid conflicts.
 # Docs: https://docs.docker.com/engine/install/ubuntu/
+#
+# Distro packages (apt update/upgrade) use Gozunga's on-net mirror for speed:
+#   https://mirror.gozunga.com/ubuntu
+# Docker CE packages still come from download.docker.com (not mirrored yet).
+
+# Point Ubuntu archive + security at the on-net Gozunga mirror before packages
+# and package_update/package_upgrade run.
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
 
 package_update: true
 package_upgrade: true
@@ -11,6 +25,26 @@ packages:
   - curl
 
 runcmd:
+  # Belt-and-suspenders: rewrite any leftover Ubuntu apt sources to the mirror
+  # (cloud images may ship deb822 .sources files and/or classic sources.list).
+  - |
+    set -e
+    mirror='https://mirror.gozunga.com/ubuntu'
+    if [ -f /etc/apt/sources.list ]; then
+      sed -i -E \
+        -e "s|https?://([a-z0-9.-]+\.)?archive\.ubuntu\.com/ubuntu|${mirror}|g" \
+        -e "s|https?://security\.ubuntu\.com/ubuntu|${mirror}|g" \
+        -e "s|https?://([a-z0-9.-]+\.)?ports\.ubuntu\.com/ubuntu-ports|${mirror}|g" \
+        /etc/apt/sources.list
+    fi
+    if [ -d /etc/apt/sources.list.d ]; then
+      find /etc/apt/sources.list.d -type f \( -name '*.list' -o -name '*.sources' \) -print0 \
+        | xargs -0 -r sed -i -E \
+          -e "s|https?://([a-z0-9.-]+\.)?archive\.ubuntu\.com/ubuntu|${mirror}|g" \
+          -e "s|https?://security\.ubuntu\.com/ubuntu|${mirror}|g" \
+          -e "s|https?://([a-z0-9.-]+\.)?ports\.ubuntu\.com/ubuntu-ports|${mirror}|g"
+    fi
+
   # Remove conflicting / distro Docker packages (ok if not installed)
   - |
     DEBIAN_FRONTEND=noninteractive apt-get remove -y \
@@ -45,4 +79,4 @@ runcmd:
       if id "$u" >/dev/null 2>&1; then usermod -aG docker "$u"; fi
     done
 
-final_message: "Docker Engine (official) installed on Ubuntu after $UPTIME seconds."
+final_message: "Docker Engine (official) installed on Ubuntu after $UPTIME seconds (Gozunga apt mirror)."

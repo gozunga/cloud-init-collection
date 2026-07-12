@@ -2,6 +2,33 @@
 # Install Docker Engine on Rocky Linux (and similar RHEL-style) from Docker's official repo.
 # Uninstalls distro Docker packages first to avoid conflicts.
 # Docs: https://docs.docker.com/engine/install/centos/
+#
+# Distro dnf traffic uses Gozunga's on-net Rocky mirror for speed:
+#   https://mirror.gozunga.com/rocky-linux/$releasever
+# Docker CE packages still come from download.docker.com (not mirrored yet).
+#
+# Docker's dependencies may pull newer kernel-modules than the running kernel.
+# If that happens, power_state reboots after cloud-init so Docker starts on
+# the matching kernel.
+
+bootcmd:
+  # Point Rocky repos at Gozunga mirror before any dnf work.
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
 
 package_update: true
 package_upgrade: true
@@ -12,6 +39,24 @@ packages:
   - ca-certificates
 
 runcmd:
+  # Re-apply mirror rewrite in case package manager refreshed repo files.
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
+    dnf clean all || true
+    dnf makecache || true
+
   # Remove conflicting / distro Docker packages (ok if not installed)
   - |
     dnf remove -y \
@@ -24,7 +69,20 @@ runcmd:
   - |
     dnf install -y \
       docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  - systemctl enable --now docker
+
+  # Enable Docker — only start now if kernel modules match the running kernel.
+  # Docker deps may pull newer kernel-modules; iptables-nft needs matching modules.
+  # If mismatched, power_state (below) reboots and Docker auto-starts on new kernel.
+  - |
+    systemctl enable docker
+    running_kern=$(uname -r)
+    newest_kern=$(ls -1 /lib/modules | sort -V | tail -1)
+    if [ "$running_kern" = "$newest_kern" ]; then
+      echo "Kernel unchanged ($running_kern); starting Docker now."
+      systemctl start docker
+    else
+      echo "Kernel modules upgraded ($running_kern -> $newest_kern); Docker will start after reboot."
+    fi
 
   # Optional: allow default cloud user to run docker without sudo
   - |
@@ -32,4 +90,14 @@ runcmd:
       if id "$u" >/dev/null 2>&1; then usermod -aG docker "$u"; fi
     done
 
-final_message: "Docker Engine (official) installed on Rocky/RHEL-style after $UPTIME seconds."
+# Reboot when Docker deps installed a newer kernel than the one running.
+# Runs AFTER all cloud-init modules complete.  No-op if kernels match.
+power_state:
+  delay: "now"
+  mode: reboot
+  message: "Rebooting for kernel upgrade (Docker needs matching kernel modules)."
+  condition: |
+    #!/bin/bash
+    [ "$(uname -r)" != "$(ls -1 /lib/modules | sort -V | tail -1)" ]
+
+final_message: "Docker Engine (official) installed on Rocky/RHEL-style after $UPTIME seconds (Gozunga dnf mirror)."

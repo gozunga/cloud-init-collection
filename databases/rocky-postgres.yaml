@@ -1,7 +1,29 @@
 #cloud-config
-# Rocky/Alma: PostgreSQL single-node starter.
+# Install PostgreSQL on Rocky Linux (and similar RHEL-style) from distro packages.
 # Creates DB/user app/app with password CHANGE_ME.
 # Listens on localhost only by default.
+#
+# Distro dnf traffic uses Gozunga's on-net Rocky mirror for speed:
+#   https://mirror.gozunga.com/rocky-linux/$releasever
+
+bootcmd:
+  # Point Rocky repos at Gozunga mirror before any dnf work.
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
 
 package_update: true
 package_upgrade: true
@@ -11,11 +33,33 @@ packages:
   - postgresql-contrib
 
 runcmd:
+  # Re-apply mirror rewrite in case package manager refreshed repo files.
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
+    dnf clean all || true
+    dnf makecache || true
+
+  # Init the database cluster if first run
   - |
     if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then
       postgresql-setup --initdb || postgresql-setup initdb || true
     fi
+
   - systemctl enable --now postgresql
+
+  # Create app database and user
   - |
     sudo -u postgres psql <<'SQL'
     DO $$
@@ -29,4 +73,4 @@ runcmd:
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'app')\gexec
     SQL
 
-final_message: "PostgreSQL ready. DB=app user=app password=CHANGE_ME (change immediately)."
+final_message: "PostgreSQL ready after $UPTIME seconds. DB=app user=app password=CHANGE_ME (change immediately). Gozunga dnf mirror."

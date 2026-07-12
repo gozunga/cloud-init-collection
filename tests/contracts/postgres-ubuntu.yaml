@@ -1,0 +1,16 @@
+# Contract: PostgreSQL on Ubuntu from distro packages
+name: postgres-ubuntu
+example: databases/ubuntu-postgres.yaml
+image: ubuntu-26.04
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: postgres
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - psql SELECT version() returns PostgreSQL
+  - app database exists
+  - app role exists
