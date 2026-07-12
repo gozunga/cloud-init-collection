@@ -111,6 +111,7 @@ Ports: `80`, `443`.
 | File | Notes |
 |------|-------|
 | [`security/ubuntu-vault.yaml`](./security/ubuntu-vault.yaml) / [`security/rocky-vault.yaml`](./security/rocky-vault.yaml) | Vault single-node bootstrap on `:8200` (TLS off — not prod HA) |
+| [`security/ubuntu-wazuh-aio.yaml`](./security/ubuntu-wazuh-aio.yaml) / [`security/rocky-wazuh-aio.yaml`](./security/rocky-wazuh-aio.yaml) | Wazuh all-in-one (indexer+server+dashboard); dashboard HTTPS `:443` |
 
 ## Observability
 
@@ -118,11 +119,12 @@ Ports: `80`, `443`.
 |------|-------|
 | [`observability/ubuntu-netdata.yaml`](./observability/ubuntu-netdata.yaml) / [`observability/rocky-netdata.yaml`](./observability/rocky-netdata.yaml) | Netdata UI `:19999` |
 | [`observability/ubuntu-prometheus-grafana.yaml`](./observability/ubuntu-prometheus-grafana.yaml) / [`observability/rocky-prometheus-grafana.yaml`](./observability/rocky-prometheus-grafana.yaml) | Prometheus `:9090`, Grafana `:3000` (admin/admin) |
+| [`observability/ubuntu-librenms.yaml`](./observability/ubuntu-librenms.yaml) / [`observability/rocky-librenms.yaml`](./observability/rocky-librenms.yaml) | LibreNMS Docker stack UI `:8000` (+ syslog 514, SNMP traps 162) |
 
 ## Notes
 
 - **Security groups:** Gozunga instances deny inbound by default — open only what you need.
-- **First boot time:** desktops, Coolify, GPU drivers, Rust, Node scaffolds can take many minutes.
+- **First boot time:** desktops, Coolify, GPU drivers, Rust, Node scaffolds, LibreNMS, and Wazuh AIO can take many minutes (Wazuh often 10–20+).
 - **Not production hardened:** starter templates. Change default passwords, enable TLS, and restrict access.
 - **Secrets:** avoid putting long-lived production secrets in userdata.
 

@@ -1,0 +1,68 @@
+#cloud-config
+# Rocky/Alma: Wazuh all-in-one (indexer + server + dashboard) via official install assistant.
+# Dashboard: https://<server-ip>  (default user admin; password printed by installer)
+# Agent communication: TCP/1514, TCP/1515; Dashboard: TCP/443; Indexer API: TCP/9200
+#
+# Docs: https://documentation.wazuh.com/current/quickstart.html
+# Assistant: https://packages.wazuh.com/4.14/wazuh-install.sh
+#
+# Needs a decent VM (4+ vCPU / 8+ GB RAM recommended). First boot can take 10–20+ minutes.
+# Credentials/passwords are written under /root and installer logs at /var/log/wazuh-install.log
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - tar
+  - gnupg
+  - ca-certificates
+  - coreutils
+
+write_files:
+  - path: /etc/sysctl.d/99-wazuh.conf
+    permissions: '0644'
+    content: |
+      vm.max_map_count=262144
+      vm.swappiness=1
+
+  - path: /usr/local/sbin/wazuh-aio-bootstrap.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      sysctl --system || true
+      sysctl -w vm.max_map_count=262144
+
+      HN=$(hostname -s)
+      if ! getent hosts "$HN" >/dev/null 2>&1; then
+        echo "127.0.0.1 $HN" >> /etc/hosts
+      fi
+      if ! getent hosts "$(hostname -f 2>/dev/null || true)" >/dev/null 2>&1; then
+        FQDN=$(hostname -f 2>/dev/null || hostname)
+        echo "127.0.0.1 $FQDN" >> /etc/hosts || true
+      fi
+
+      # Disable firewalld interference if present (adjust to your security model)
+      systemctl stop firewalld 2>/dev/null || true
+      systemctl disable firewalld 2>/dev/null || true
+
+      cd /root
+      curl -fsSLO https://packages.wazuh.com/4.14/wazuh-install.sh
+      chmod +x wazuh-install.sh
+      bash ./wazuh-install.sh -a -o | tee /var/log/wazuh-aio-cloud-init.log
+
+      if ls /root/wazuh-install-files.tar >/dev/null 2>&1; then
+        echo "Install files: /root/wazuh-install-files.tar" | tee /root/WAZUH_INSTALL_NOTES.txt
+      fi
+      if [ -f /var/log/wazuh-install.log ]; then
+        grep -E 'Password|User|dashboard|https://' /var/log/wazuh-install.log | tail -n 50 \
+          | tee -a /root/WAZUH_INSTALL_NOTES.txt || true
+      fi
+      echo "Wazuh AIO bootstrap finished at $(date -Is)" | tee -a /root/WAZUH_INSTALL_NOTES.txt
+
+runcmd:
+  - /usr/local/sbin/wazuh-aio-bootstrap.sh
+
+final_message: "Wazuh AIO install finished (or logged errors). See /root/WAZUH_INSTALL_NOTES.txt and /var/log/wazuh-install.log"
