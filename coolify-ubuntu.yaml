@@ -1,0 +1,18 @@
+#cloud-config
+# Install Coolify on Ubuntu using the official installer.
+# Matches the Gozunga technical guide:
+# https://gozunga.com/technical-guides-and-how-tos/installing-coolify-on-gozunga-cloud
+#
+# After boot, open: http://<server-ip>:8000
+# Open security group ports: 8000 (mgmt), 6001/6002 (optional), 80/443 (apps)
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+
+runcmd:
+  - curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+
+final_message: "Coolify installation has been completed. The system is now ready to use after $UPTIME seconds."

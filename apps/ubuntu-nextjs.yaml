@@ -1,0 +1,52 @@
+#cloud-config
+# Ubuntu: Node.js (NodeSource 22.x) + create-next-app starter, systemd on :3000
+# After boot: http://<server-ip>:3000/
+# First boot downloads npm packages and can take a few minutes.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+  - git
+
+write_files:
+  - path: /etc/systemd/system/nextjs-app.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Next.js app
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=www-data
+      WorkingDirectory=/opt/nextjs-app
+      Environment=NODE_ENV=production
+      Environment=PORT=3000
+      Environment=HOSTNAME=0.0.0.0
+      ExecStart=/usr/bin/npm run start --prefix /opt/nextjs-app
+      Restart=always
+      RestartSec=3
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - |
+    set -e
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+    if [ ! -f /opt/nextjs-app/package.json ]; then
+      npx --yes create-next-app@latest /opt/nextjs-app \
+        --ts --eslint --app --src-dir --import-alias "@/*" \
+        --tailwind --use-npm --no-turbopack
+    fi
+    cd /opt/nextjs-app
+    npm run build
+    chown -R www-data:www-data /opt/nextjs-app
+    systemctl daemon-reload
+    systemctl enable --now nextjs-app
+
+final_message: "Next.js app listening on :3000 after $UPTIME seconds."

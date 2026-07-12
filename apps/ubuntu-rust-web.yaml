@@ -1,0 +1,88 @@
+#cloud-config
+# Ubuntu: install Rust toolchain, build a tiny Axum HTTP server, run via systemd on :8080
+# After boot: http://<server-ip>:8080/
+# Note: first boot compiles from source and can take several minutes.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - build-essential
+  - pkg-config
+  - libssl-dev
+  - ca-certificates
+
+write_files:
+  - path: /opt/rust-app/Cargo.toml
+    permissions: '0644'
+    content: |
+      [package]
+      name = "rust-app"
+      version = "0.1.0"
+      edition = "2021"
+
+      [dependencies]
+      axum = "0.8"
+      serde = { version = "1", features = ["derive"] }
+      serde_json = "1"
+      tokio = { version = "1", features = ["full"] }
+
+  - path: /opt/rust-app/src/main.rs
+    permissions: '0644'
+    content: |
+      use axum::{routing::get, Json, Router};
+      use serde_json::{json, Value};
+      use std::net::SocketAddr;
+
+      async fn root() -> Json<Value> {
+          Json(json!({"message":"hello from cloud-init","stack":"rust"}))
+      }
+
+      async fn health() -> Json<Value> {
+          Json(json!({"status":"ok"}))
+      }
+
+      #[tokio::main]
+      async fn main() {
+          let app = Router::new()
+              .route("/", get(root))
+              .route("/health", get(health));
+          let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+          let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+          axum::serve(listener, app).await.unwrap();
+      }
+
+  - path: /etc/systemd/system/rust-app.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Rust web app (axum)
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=www-data
+      WorkingDirectory=/opt/rust-app
+      ExecStart=/opt/rust-app/target/release/rust-app
+      Restart=always
+      RestartSec=3
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - |
+    set -e
+    export CARGO_HOME=/usr/local/cargo
+    export RUSTUP_HOME=/usr/local/rustup
+    export PATH="$CARGO_HOME/bin:$PATH"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+    echo 'export PATH=/usr/local/cargo/bin:$PATH' >/etc/profile.d/rust.sh
+    cd /opt/rust-app
+    cargo build --release
+    chown -R www-data:www-data /opt/rust-app
+    systemctl daemon-reload
+    systemctl enable --now rust-app
+
+final_message: "Rust Axum app listening on :8080 after $UPTIME seconds."

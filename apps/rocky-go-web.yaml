@@ -1,0 +1,88 @@
+#cloud-config
+# Rocky/RHEL-style: install Go toolchain, build a tiny HTTP server, run via systemd on :8080
+# After boot: http://<server-ip>:8080/
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+  - tar
+  - git
+
+write_files:
+  - path: /opt/go-app/go.mod
+    permissions: '0644'
+    content: |
+      module go-app
+
+      go 1.22
+
+  - path: /opt/go-app/main.go
+    permissions: '0644'
+    content: |
+      package main
+
+      import (
+        "encoding/json"
+        "log"
+        "net/http"
+      )
+
+      func main() {
+        mux := http.NewServeMux()
+        mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+          _ = json.NewEncoder(w).Encode(map[string]string{
+            "message": "hello from cloud-init",
+            "stack":   "go",
+          })
+        })
+        mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+          _ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+        })
+        log.Println("listening on :8080")
+        log.Fatal(http.ListenAndServe(":8080", mux))
+      }
+
+  - path: /etc/systemd/system/go-app.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Go web app
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=nobody
+      WorkingDirectory=/opt/go-app
+      ExecStart=/opt/go-app/app
+      Restart=always
+      RestartSec=3
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - |
+    set -e
+    GO_VER=1.22.12
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64) GO_ARCH=amd64 ;;
+      aarch64) GO_ARCH=arm64 ;;
+      *) GO_ARCH=amd64 ;;
+    esac
+    curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tgz
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf /tmp/go.tgz
+    echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh
+    export PATH=$PATH:/usr/local/go/bin
+    cd /opt/go-app
+    /usr/local/go/bin/go mod tidy || true
+    /usr/local/go/bin/go build -o /opt/go-app/app .
+    chown -R nobody:nobody /opt/go-app
+    systemctl daemon-reload
+    systemctl enable --now go-app
+
+final_message: "Go web app listening on :8080 after $UPTIME seconds."

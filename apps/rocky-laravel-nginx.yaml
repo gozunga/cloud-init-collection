@@ -1,0 +1,74 @@
+#cloud-config
+# Rocky/RHEL-style: PHP-FPM + Nginx + Composer skeleton Laravel app on :80
+# After boot: http://<server-ip>/
+# Uses AppStream PHP packages; open security group TCP/80.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - nginx
+  - curl
+  - unzip
+  - git
+  - php
+  - php-cli
+  - php-fpm
+  - php-mbstring
+  - php-xml
+  - php-json
+  - php-curl
+  - php-zip
+  - php-bcmath
+  - php-pdo
+  - php-mysqlnd
+  - php-sqlite3
+  - sqlite
+
+write_files:
+  - path: /etc/nginx/conf.d/laravel.conf
+    permissions: '0644'
+    content: |
+      server {
+          listen 80 default_server;
+          listen [::]:80 default_server;
+          server_name _;
+          root /var/www/laravel/public;
+          index index.php index.html;
+
+          location / {
+              try_files $uri $uri/ /index.php?$query_string;
+          }
+
+          location ~ \.php$ {
+              try_files $uri =404;
+              fastcgi_split_path_info ^(.+\.php)(/.+)$;
+              fastcgi_pass unix:/run/php-fpm/www.sock;
+              fastcgi_index index.php;
+              include fastcgi_params;
+              fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+              fastcgi_param PATH_INFO $fastcgi_path_info;
+          }
+
+          location ~ /\.(?!well-known).* {
+              deny all;
+          }
+      }
+
+runcmd:
+  - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+  - mkdir -p /var/www
+  - |
+    if [ ! -f /var/www/laravel/artisan ]; then
+      composer create-project laravel/laravel /var/www/laravel --prefer-dist --no-interaction
+    fi
+  - chown -R nginx:nginx /var/www/laravel
+  - chmod -R ug+rwx /var/www/laravel/storage /var/www/laravel/bootstrap/cache
+  # SELinux: allow nginx network / content (best-effort)
+  - setsebool -P httpd_can_network_connect 1 || true
+  - chcon -Rt httpd_sys_content_t /var/www/laravel || true
+  - chcon -Rt httpd_sys_rw_content_t /var/www/laravel/storage /var/www/laravel/bootstrap/cache || true
+  - systemctl enable --now php-fpm nginx
+  - systemctl reload nginx || systemctl restart nginx
+
+final_message: "Laravel (PHP-FPM + Nginx) ready on Rocky/RHEL-style after $UPTIME seconds."

@@ -1,0 +1,35 @@
+#cloud-config
+# Install Docker Engine on Rocky Linux (and similar RHEL-style) from Docker's official repo.
+# Uninstalls distro Docker packages first to avoid conflicts.
+# Docs: https://docs.docker.com/engine/install/centos/
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - dnf-plugins-core
+  - curl
+  - ca-certificates
+
+runcmd:
+  # Remove conflicting / distro Docker packages (ok if not installed)
+  - |
+    dnf remove -y \
+      docker docker-client docker-client-latest docker-common \
+      docker-latest docker-latest-logrotate docker-logrotate docker-engine \
+      podman-docker runc || true
+
+  # Docker official yum/dnf repository (centos channel works for Rocky)
+  - dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  - |
+    dnf install -y \
+      docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable --now docker
+
+  # Optional: allow default cloud user to run docker without sudo
+  - |
+    for u in rocky cloud-user alma ec2-user; do
+      if id "$u" >/dev/null 2>&1; then usermod -aG docker "$u"; fi
+    done
+
+final_message: "Docker Engine (official) installed on Rocky/RHEL-style after $UPTIME seconds."
