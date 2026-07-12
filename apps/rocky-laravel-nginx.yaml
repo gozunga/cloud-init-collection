@@ -1,7 +1,26 @@
 #cloud-config
 # Rocky/RHEL-style: PHP-FPM + Nginx + Composer skeleton Laravel app on :80
 # After boot: http://<server-ip>/
-# Uses AppStream PHP packages; open security group TCP/80.
+# Uses Remi repo for PHP 8.3 (AppStream ships 8.0 which is too old for
+# current Laravel). Open security group TCP/80.
+
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
 
 package_update: true
 package_upgrade: true
@@ -11,18 +30,6 @@ packages:
   - curl
   - unzip
   - git
-  - php
-  - php-cli
-  - php-fpm
-  - php-mbstring
-  - php-xml
-  - php-json
-  - php-curl
-  - php-zip
-  - php-bcmath
-  - php-pdo
-  - php-mysqlnd
-  - php-sqlite3
   - sqlite
 
 write_files:
@@ -56,7 +63,17 @@ write_files:
       }
 
 runcmd:
+  - export HOME=/root
+  # Install Remi repo + PHP 8.3 (AppStream PHP 8.0 is too old for Laravel 11+)
+  - dnf install -y https://rpms.remirepo.net/enterprise/remi-release-10.rpm || dnf install -y https://rpms.remirepo.net/enterprise/remi-release-9.rpm
+  - dnf module reset php -y || true
+  - dnf module enable php:remi-8.3 -y || true
+  - dnf install -y php php-cli php-fpm php-mbstring php-xml php-curl php-zip php-bcmath php-pdo php-mysqlnd php-sqlite3
+
+  # Install Composer
   - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+  # Create Laravel project
   - mkdir -p /var/www
   - |
     if [ ! -f /var/www/laravel/artisan ]; then
@@ -64,11 +81,24 @@ runcmd:
     fi
   - chown -R nginx:nginx /var/www/laravel
   - chmod -R ug+rwx /var/www/laravel/storage /var/www/laravel/bootstrap/cache
-  # SELinux: allow nginx network / content (best-effort)
+
+  # SELinux: allow nginx/php-fpm to serve content and use temp files
   - setsebool -P httpd_can_network_connect 1 || true
+  - setsebool -P httpd_tmp_exec on || true
+  - setsebool -P httpd_unified on || true
   - chcon -Rt httpd_sys_content_t /var/www/laravel || true
   - chcon -Rt httpd_sys_rw_content_t /var/www/laravel/storage /var/www/laravel/bootstrap/cache || true
+
+  # PHP session/temp dirs
+  - mkdir -p /var/lib/php/session /var/lib/php/wsdlcache /var/lib/php/opcache
+  - chown -R nginx:nginx /var/lib/php
+  - chcon -Rt httpd_sys_rw_content_t /var/lib/php || true
+
+  # Configure php-fpm to run as nginx user
+  - sed -i 's/^user = .*/user = nginx/' /etc/php-fpm.d/www.conf || true
+  - sed -i 's/^group = .*/group = nginx/' /etc/php-fpm.d/www.conf || true
+
   - systemctl enable --now php-fpm nginx
   - systemctl reload nginx || systemctl restart nginx
 
-final_message: "Laravel (PHP-FPM + Nginx) ready on Rocky/RHEL-style after $UPTIME seconds."
+final_message: "Laravel (PHP 8.3 via Remi + Nginx) ready on Rocky/RHEL-style after $UPTIME seconds (Gozunga dnf mirror)"

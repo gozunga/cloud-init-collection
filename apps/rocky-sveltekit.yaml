@@ -1,5 +1,26 @@
 #cloud-config
 # Rocky/Alma: SvelteKit demo app on Node 22, systemd on :3000
+# Scaffolds a minimal SvelteKit project inline (sv create CLI doesn't
+# support fully non-interactive use), builds with adapter-node, and
+# runs via systemd.
+
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
 
 package_update: true
 package_upgrade: true
@@ -31,23 +52,61 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  - path: /opt/sveltekit-app/package.json
+    permissions: '0644'
+    content: |
+      {
+        "name": "sveltekit-app",
+        "private": true,
+        "version": "0.0.1",
+        "type": "module",
+        "scripts": {
+          "dev": "vite dev",
+          "build": "vite build",
+          "preview": "vite preview",
+          "start": "node build"
+        }
+      }
+
+  - path: /opt/sveltekit-app/svelte.config.js
+    permissions: '0644'
+    content: |
+      import adapter from '@sveltejs/adapter-node';
+      export default { kit: { adapter: adapter() } };
+
+  - path: /opt/sveltekit-app/vite.config.js
+    permissions: '0644'
+    content: |
+      import { sveltekit } from '@sveltejs/kit/vite';
+      import { defineConfig } from 'vite';
+      export default defineConfig({ plugins: [sveltekit()] });
+
+  - path: /opt/sveltekit-app/src/app.html
+    permissions: '0644'
+    content: |
+      <!doctype html>
+      <html lang="en">
+      <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" />%sveltekit.head%</head>
+      <body>%sveltekit.body%</body>
+      </html>
+
+  - path: /opt/sveltekit-app/src/routes/+page.svelte
+    permissions: '0644'
+    content: |
+      <h1>Welcome to SvelteKit</h1>
+      <p>Cloud-init deployed.</p>
+
 runcmd:
   - |
     set -e
+    export HOME=/root
     curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
     dnf install -y nodejs
-    if [ ! -f /opt/sveltekit-app/package.json ]; then
-      npm create --yes svelte@latest /opt/sveltekit-app -- --template skeleton --types ts --no-add-ons --no-install
-    fi
     cd /opt/sveltekit-app
-    npm install
-    npm install -D @sveltejs/adapter-node
-    if [ -f svelte.config.js ]; then
-      sed -i 's|@sveltejs/adapter-auto|@sveltejs/adapter-node|g' svelte.config.js || true
-    fi
+    npm install svelte @sveltejs/kit @sveltejs/adapter-node vite
     npm run build
     chown -R nobody:nobody /opt/sveltekit-app
     systemctl daemon-reload
     systemctl enable --now sveltekit-app
 
-final_message: "SvelteKit app listening on :3000"
+final_message: "SvelteKit app listening on :3000 after $UPTIME seconds (Gozunga dnf mirror)"

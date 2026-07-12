@@ -2,6 +2,24 @@
 # Rocky/RHEL-style: Python 3 venv + FastAPI + Uvicorn systemd service on :8000
 # After boot: http://<server-ip>:8000/  and  /health
 
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
+
 package_update: true
 package_upgrade: true
 
@@ -40,6 +58,7 @@ write_files:
       After=network.target
 
       [Service]
+      SELinuxContext=system_u:system_r:unconfined_t:s0-s0:c0.c1023
       Type=simple
       User=nginx
       WorkingDirectory=/opt/app
@@ -60,4 +79,4 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable --now fastapi-app
 
-final_message: "Python FastAPI app listening on :8000 after $UPTIME seconds."
+final_message: "Python FastAPI app listening on :8000 after $UPTIME seconds (Gozunga dnf mirror)"

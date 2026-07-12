@@ -3,6 +3,14 @@
 # After boot: http://<server-ip>:8080/
 # Note: first boot compiles from source and can take several minutes.
 
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
 package_update: true
 package_upgrade: true
 
@@ -74,6 +82,7 @@ write_files:
 runcmd:
   - |
     set -e
+    export HOME=/root
     export CARGO_HOME=/usr/local/cargo
     export RUSTUP_HOME=/usr/local/rustup
     export PATH="$CARGO_HOME/bin:$PATH"
@@ -85,4 +94,4 @@ runcmd:
     systemctl daemon-reload
     systemctl enable --now rust-app
 
-final_message: "Rust Axum app listening on :8080 after $UPTIME seconds."
+final_message: "Rust Axum app listening on :8080 after $UPTIME seconds (Gozunga apt mirror)"

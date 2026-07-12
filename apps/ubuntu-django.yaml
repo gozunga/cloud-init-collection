@@ -1,6 +1,14 @@
 #cloud-config
 # Ubuntu: Django starter app + gunicorn systemd on :8000
 
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
 package_update: true
 package_upgrade: true
 
@@ -47,4 +55,4 @@ runcmd:
     systemctl daemon-reload
     systemctl enable --now django-app
 
-final_message: "Django/gunicorn listening on :8000"
+final_message: "Django/gunicorn listening on :8000 (Gozunga apt mirror)"

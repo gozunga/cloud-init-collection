@@ -1,0 +1,15 @@
+# Contract: python-fastapi on Ubuntu via apps/ubuntu-python-fastapi.yaml
+name: python-fastapi-ubuntu
+example: apps/ubuntu-python-fastapi.yaml
+image: ubuntu-26.04
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: basic
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - app service is running
+  - HTTP port responds (8000)

@@ -2,6 +2,14 @@
 # Ubuntu: install Go toolchain, build a tiny HTTP server, run via systemd on :8080
 # After boot: http://<server-ip>:8080/
 
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
 package_update: true
 package_upgrade: true
 
@@ -78,6 +86,9 @@ runcmd:
     tar -C /usr/local -xzf /tmp/go.tgz
     echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh
     export PATH=$PATH:/usr/local/go/bin
+    export HOME=/root
+    export GOCACHE=/root/.cache/go-build
+    export GOPATH=/root/go
     cd /opt/go-app
     /usr/local/go/bin/go mod tidy || true
     /usr/local/go/bin/go build -o /opt/go-app/app .
@@ -85,4 +96,4 @@ runcmd:
     systemctl daemon-reload
     systemctl enable --now go-app
 
-final_message: "Go web app listening on :8080 after $UPTIME seconds."
+final_message: "Go web app listening on :8080 after $UPTIME seconds (Gozunga apt mirror)"

@@ -3,6 +3,14 @@
 # After boot: http://<server-ip>:3000/
 # First boot downloads npm packages and can take a few minutes.
 
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
 package_update: true
 package_upgrade: true
 
@@ -36,8 +44,12 @@ write_files:
 runcmd:
   - |
     set -e
+    export HOME=/root
+    export DEBIAN_FRONTEND=noninteractive
+    export NEEDRESTART_MODE=a
+    export NEEDRESTART_SUSPEND=1
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-    DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+    apt-get install -y nodejs
     if [ ! -f /opt/nextjs-app/package.json ]; then
       npx --yes create-next-app@latest /opt/nextjs-app \
         --ts --eslint --app --src-dir --import-alias "@/*" \
@@ -49,4 +61,4 @@ runcmd:
     systemctl daemon-reload
     systemctl enable --now nextjs-app
 
-final_message: "Next.js app listening on :3000 after $UPTIME seconds."
+final_message: "Next.js app listening on :3000 after $UPTIME seconds (Gozunga apt mirror)"

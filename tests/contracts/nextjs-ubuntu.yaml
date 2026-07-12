@@ -1,0 +1,15 @@
+# Contract: nextjs on Ubuntu via apps/ubuntu-nextjs.yaml
+name: nextjs-ubuntu
+example: apps/ubuntu-nextjs.yaml
+image: ubuntu-26.04
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: basic
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - app service is running
+  - HTTP port responds (3000)

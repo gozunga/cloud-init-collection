@@ -1,0 +1,15 @@
+# Contract: laravel-nginx on Rocky via apps/rocky-laravel-nginx.yaml
+name: laravel-nginx-rocky
+example: apps/rocky-laravel-nginx.yaml
+image: rocky-10
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: rocky
+probe: basic
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - app service is running
+  - HTTP port responds (80)

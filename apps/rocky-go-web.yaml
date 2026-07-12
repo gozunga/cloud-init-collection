@@ -2,6 +2,24 @@
 # Rocky/RHEL-style: install Go toolchain, build a tiny HTTP server, run via systemd on :8080
 # After boot: http://<server-ip>:8080/
 
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i \
+        -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+        -e 's/^[[:space:]]*metalink=/# metalink=/' \
+        "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i \
+        -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+        -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+        "$f"
+    done
+
 package_update: true
 package_upgrade: true
 
@@ -53,6 +71,7 @@ write_files:
       After=network.target
 
       [Service]
+      SELinuxContext=system_u:system_r:unconfined_t:s0-s0:c0.c1023
       Type=simple
       User=nobody
       WorkingDirectory=/opt/go-app
@@ -78,11 +97,16 @@ runcmd:
     tar -C /usr/local -xzf /tmp/go.tgz
     echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh
     export PATH=$PATH:/usr/local/go/bin
+    export HOME=/root
+    export GOCACHE=/root/.cache/go-build
+    export GOPATH=/root/go
     cd /opt/go-app
     /usr/local/go/bin/go mod tidy || true
     /usr/local/go/bin/go build -o /opt/go-app/app .
+    # SELinux: relabel binary so systemd can exec it from a non-standard path
+    chcon -t bin_t /opt/go-app/app || true
     chown -R nobody:nobody /opt/go-app
     systemctl daemon-reload
     systemctl enable --now go-app
 
-final_message: "Go web app listening on :8080 after $UPTIME seconds."
+final_message: "Go web app listening on :8080 after $UPTIME seconds (Gozunga dnf mirror)"

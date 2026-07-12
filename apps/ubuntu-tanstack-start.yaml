@@ -2,6 +2,14 @@
 # Ubuntu: TanStack Start (Vinxi) starter on Node 22, systemd on :3000
 # Scaffold APIs change; this uses the official create CLI flags when available.
 
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
 package_update: true
 package_upgrade: true
 
@@ -25,7 +33,7 @@ write_files:
       Environment=NODE_ENV=production
       Environment=PORT=3000
       Environment=HOST=0.0.0.0
-      ExecStart=/usr/bin/npm run start --prefix /opt/tanstack-app
+      ExecStart=/usr/bin/node /opt/tanstack-app/node_modules/vite/bin/vite.js preview --port 3000 --host 0.0.0.0
       Restart=always
       RestartSec=3
 
@@ -35,25 +43,23 @@ write_files:
 runcmd:
   - |
     set -e
+    export HOME=/root
+    export DEBIAN_FRONTEND=noninteractive
+    export NEEDRESTART_MODE=a
+    export NEEDRESTART_SUSPEND=1
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-    DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+    apt-get install -y nodejs
     if [ ! -f /opt/tanstack-app/package.json ]; then
-      # Prefer official create flow; fall back to a minimal package if CLI flags change
-      if npx --yes create-tsrouter-app@latest /opt/tanstack-app --template start --package-manager npm; then
-        true
-      else
-        mkdir -p /opt/tanstack-app
-        cd /opt/tanstack-app
-        npm init -y
-        npm install @tanstack/react-start vinxi react react-dom
-        printf '%s\n' '{"name":"tanstack-app","private":true,"type":"module","scripts":{"dev":"vinxi dev","build":"vinxi build","start":"vinxi start"}}' > package.json
-      fi
+      # CLI rejects paths with /; create in temp dir then move
+      cd /tmp
+      npx --yes @tanstack/cli create tanstack-app -y --package-manager npm
+      mv /tmp/tanstack-app /opt/tanstack-app
     fi
     cd /opt/tanstack-app
-    npm install || true
-    npm run build || true
+    npm install
+    npm run build
     chown -R www-data:www-data /opt/tanstack-app
     systemctl daemon-reload
     systemctl enable --now tanstack-app || true
 
-final_message: "TanStack Start scaffolded on :3000 (verify build if CLI changed)."
+final_message: "TanStack Start listening on :3000 after $UPTIME seconds (Gozunga apt mirror)"
