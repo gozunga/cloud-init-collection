@@ -32,18 +32,17 @@ runcmd:
     curl -fsSL https://raw.githubusercontent.com/librenms/docker/master/examples/compose/msmtpd.env -o msmtpd.env
 
     # Placeholder SMTP values (edit later if you want email alerts)
-    cat > msmtpd.env <<'SMTP'
-    SMTP_HOST=smtp.example.com
-    SMTP_PORT=587
-    SMTP_TLS=on
-    SMTP_STARTTLS=on
-    SMTP_TLS_CHECKCERT=on
-    SMTP_AUTH=on
-    SMTP_USER=CHANGE_ME
-    SMTP_PASSWORD=CHANGE_ME
-    SMTP_FROM=librenms@example.com
-    SMTP
-    sed -i 's/^[[:space:]]\+//' msmtpd.env
+    printf '%s\n' \
+      'SMTP_HOST=smtp.example.com' \
+      'SMTP_PORT=587' \
+      'SMTP_TLS=on' \
+      'SMTP_STARTTLS=on' \
+      'SMTP_TLS_CHECKCERT=on' \
+      'SMTP_AUTH=on' \
+      'SMTP_USER=CHANGE_ME' \
+      'SMTP_PASSWORD=CHANGE_ME' \
+      'SMTP_FROM=librenms@example.com' \
+      > msmtpd.env
 
     DBPASS="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)"
     printf '%s\n' \

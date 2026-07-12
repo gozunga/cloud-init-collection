@@ -13,9 +13,7 @@ packages:
 
 runcmd:
   - |
-    DEBIAN_FRONTEND=noninteractive debconf-set-selections <<'SEL'
-    sddm shared/default-x-display-manager select sddm
-    SEL
+    echo 'sddm shared/default-x-display-manager select sddm' | debconf-set-selections
   - dpkg-reconfigure -f noninteractive sddm || true
   - systemctl enable sddm || true
   - systemctl set-default graphical.target
