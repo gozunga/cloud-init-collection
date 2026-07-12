@@ -1,0 +1,59 @@
+#cloud-config
+# Ubuntu: TanStack Start (Vinxi) starter on Node 22, systemd on :3000
+# Scaffold APIs change; this uses the official create CLI flags when available.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+  - git
+
+write_files:
+  - path: /etc/systemd/system/tanstack-app.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=TanStack Start app
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=www-data
+      WorkingDirectory=/opt/tanstack-app
+      Environment=NODE_ENV=production
+      Environment=PORT=3000
+      Environment=HOST=0.0.0.0
+      ExecStart=/usr/bin/npm run start --prefix /opt/tanstack-app
+      Restart=always
+      RestartSec=3
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - |
+    set -e
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+    if [ ! -f /opt/tanstack-app/package.json ]; then
+      # Prefer official create flow; fall back to a minimal package if CLI flags change
+      if npx --yes create-tsrouter-app@latest /opt/tanstack-app --template start --package-manager npm; then
+        true
+      else
+        mkdir -p /opt/tanstack-app
+        cd /opt/tanstack-app
+        npm init -y
+        npm install @tanstack/react-start vinxi react react-dom
+        printf '%s\n' '{"name":"tanstack-app","private":true,"type":"module","scripts":{"dev":"vinxi dev","build":"vinxi build","start":"vinxi start"}}' > package.json
+      fi
+    fi
+    cd /opt/tanstack-app
+    npm install || true
+    npm run build || true
+    chown -R www-data:www-data /opt/tanstack-app
+    systemctl daemon-reload
+    systemctl enable --now tanstack-app || true
+
+final_message: "TanStack Start scaffolded on :3000 (verify build if CLI changed)."

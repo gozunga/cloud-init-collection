@@ -1,0 +1,32 @@
+#cloud-config
+# Rocky/Alma: PostgreSQL single-node starter.
+# Creates DB/user app/app with password CHANGE_ME.
+# Listens on localhost only by default.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - postgresql-server
+  - postgresql-contrib
+
+runcmd:
+  - |
+    if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then
+      postgresql-setup --initdb || postgresql-setup initdb || true
+    fi
+  - systemctl enable --now postgresql
+  - |
+    sudo -u postgres psql <<'SQL'
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app') THEN
+        CREATE ROLE app LOGIN PASSWORD 'CHANGE_ME';
+      END IF;
+    END
+    $$;
+    SELECT 'CREATE DATABASE app OWNER app'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'app')\gexec
+    SQL
+
+final_message: "PostgreSQL ready. DB=app user=app password=CHANGE_ME (change immediately)."

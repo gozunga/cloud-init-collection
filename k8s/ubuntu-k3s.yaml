@@ -1,0 +1,24 @@
+#cloud-config
+# Ubuntu: single-node k3s (server + agent).
+# After boot: kubectl via /usr/local/bin/kubectl and /etc/rancher/k3s/k3s.yaml
+# Open ports as needed (6443 API, 80/443 if using Traefik).
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+
+runcmd:
+  - curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
+  - |
+    for u in ubuntu; do
+      if id "$u" >/dev/null 2>&1; then
+        mkdir -p "/home/$u/.kube"
+        cp /etc/rancher/k3s/k3s.yaml "/home/$u/.kube/config"
+        chown -R "$u:$u" "/home/$u/.kube"
+      fi
+    done
+
+final_message: "k3s single-node installed. Try: kubectl get nodes"

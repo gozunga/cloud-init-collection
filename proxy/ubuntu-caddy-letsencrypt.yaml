@@ -1,0 +1,35 @@
+#cloud-config
+# Ubuntu: Caddy reverse proxy with automatic HTTPS (Let's Encrypt).
+# Replace example.com and app backend before use.
+# Open security group TCP/80 and TCP/443.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - debian-keyring
+  - debian-archive-keyring
+  - apt-transport-https
+  - curl
+  - gnupg
+
+write_files:
+  - path: /etc/caddy/Caddyfile
+    permissions: '0644'
+    content: |
+      # Replace with your domain and backend
+      example.com {
+          reverse_proxy 127.0.0.1:3000
+      }
+
+runcmd:
+  - |
+    set -e
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+    apt-get update -y
+    DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+    systemctl enable --now caddy
+    systemctl reload caddy || systemctl restart caddy
+
+final_message: "Caddy installed. Edit /etc/caddy/Caddyfile then: systemctl reload caddy"

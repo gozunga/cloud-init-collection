@@ -1,0 +1,29 @@
+#cloud-config
+# Ubuntu: Redis single-node starter (localhost bind).
+# Set requirepass CHANGE_ME. Open 6379 only if intentionally remote.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - redis-server
+
+write_files:
+  - path: /etc/redis/redis.conf.d/99-gozunga.conf
+    permissions: '0644'
+    content: |
+      bind 127.0.0.1 ::1
+      protected-mode yes
+      requirepass CHANGE_ME
+      supervised systemd
+
+runcmd:
+  - mkdir -p /etc/redis/redis.conf.d
+  - |
+    if ! grep -q 'redis.conf.d' /etc/redis/redis.conf 2>/dev/null; then
+      echo 'include /etc/redis/redis.conf.d/99-gozunga.conf' >> /etc/redis/redis.conf
+    fi
+  - systemctl enable --now redis-server
+  - systemctl restart redis-server
+
+final_message: "Redis ready on localhost with requirepass CHANGE_ME."

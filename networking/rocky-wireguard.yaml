@@ -1,0 +1,51 @@
+#cloud-config
+# Rocky/Alma: WireGuard server scaffold.
+# Open UDP/51820. Replace client peer public key + AllowedIPs.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - epel-release
+  - wireguard-tools
+  - iptables
+
+write_files:
+  - path: /usr/local/sbin/wg-bootstrap.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      umask 077
+      confdir=/etc/wireguard
+      mkdir -p "$confdir"
+      if [ ! -f "$confdir/server_private.key" ]; then
+        wg genkey | tee "$confdir/server_private.key" | wg pubkey > "$confdir/server_public.key"
+      fi
+      PRIV=$(cat "$confdir/server_private.key")
+      PUB=$(cat "$confdir/server_public.key")
+      IFACE=$(ip -4 route show default | awk '{print $5; exit}')
+      if [ ! -f "$confdir/wg0.conf" ]; then
+        cat >"$confdir/wg0.conf" <<CFG
+      [Interface]
+      Address = 10.66.66.1/24
+      ListenPort = 51820
+      PrivateKey = ${PRIV}
+      SaveConfig = true
+      PostUp = sysctl -w net.ipv4.ip_forward=1; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ${IFACE} -j MASQUERADE
+      PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o ${IFACE} -j MASQUERADE
+
+      # [Peer]
+      # PublicKey = CLIENT_PUBLIC_KEY
+      # AllowedIPs = 10.66.66.2/32
+      CFG
+      fi
+      echo "WireGuard server public key: $PUB" | tee /etc/wireguard/SERVER_PUBLIC_KEY.txt
+      systemctl enable --now wg-quick@wg0
+
+runcmd:
+  - sysctl -w net.ipv4.ip_forward=1
+  - echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-wireguard.conf
+  - /usr/local/sbin/wg-bootstrap.sh
+
+final_message: "WireGuard wg0 up. Server pubkey in /etc/wireguard/SERVER_PUBLIC_KEY.txt"

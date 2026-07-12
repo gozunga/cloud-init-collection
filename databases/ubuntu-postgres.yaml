@@ -1,0 +1,33 @@
+#cloud-config
+# Ubuntu: PostgreSQL single-node starter.
+# Creates DB/user app/app with password CHANGE_ME.
+# Listens on localhost only by default (safer). Open 5432 only if needed.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - postgresql
+  - postgresql-contrib
+
+runcmd:
+  - systemctl enable --now postgresql
+  - |
+    sudo -u postgres psql <<'SQL'
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app') THEN
+        CREATE ROLE app LOGIN PASSWORD 'CHANGE_ME';
+      END IF;
+    END
+    $$;
+    SELECT 'CREATE DATABASE app OWNER app'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'app')\gexec
+    SQL
+  - |
+    # Optional: allow remote connections (commented for safety)
+    # echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
+    # echo "host all all 0.0.0.0/0 scram-sha-256" >> /etc/postgresql/*/main/pg_hba.conf
+    # systemctl restart postgresql
+
+final_message: "PostgreSQL ready. DB=app user=app password=CHANGE_ME (change immediately)."

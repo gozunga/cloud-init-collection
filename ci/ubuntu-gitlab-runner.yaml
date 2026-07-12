@@ -1,0 +1,35 @@
+#cloud-config
+# Ubuntu: GitLab Runner (Docker executor).
+# Replace GITLAB_URL and REGISTRATION_TOKEN before launch.
+# Docs: https://docs.gitlab.com/runner/install/linux-repository.html
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+  - gnupg
+
+runcmd:
+  # Docker (official convenience for runner host; swap for docker/ubuntu-docker-official if preferred)
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  - |
+    set -e
+    curl -fsSL https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | bash
+    DEBIAN_FRONTEND=noninteractive apt-get install -y gitlab-runner
+    usermod -aG docker gitlab-runner || true
+    # Non-interactive register (EDIT THESE)
+    # gitlab-runner register --non-interactive \
+    #   --url "https://gitlab.example.com/" \
+    #   --token "GLRT_REPLACE_ME" \
+    #   --executor "docker" \
+    #   --docker-image "docker:24" \
+    #   --description "gozunga-runner" \
+    #   --tag-list "docker,gozunga" \
+    #   --run-untagged="true" \
+    #   --locked="false"
+    systemctl enable --now gitlab-runner
+
+final_message: "GitLab Runner installed. Register with token (see commented runcmd)."

@@ -1,0 +1,31 @@
+#cloud-config
+# Rocky/Alma: GitLab Runner (Docker executor).
+# Replace registration values before use.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  - |
+    set -e
+    curl -fsSL https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh | bash
+    dnf install -y gitlab-runner
+    usermod -aG docker gitlab-runner || true
+    # gitlab-runner register --non-interactive \
+    #   --url "https://gitlab.example.com/" \
+    #   --token "GLRT_REPLACE_ME" \
+    #   --executor "docker" \
+    #   --docker-image "docker:24" \
+    #   --description "gozunga-runner" \
+    #   --tag-list "docker,gozunga" \
+    #   --run-untagged="true" \
+    #   --locked="false"
+    systemctl enable --now gitlab-runner
+
+final_message: "GitLab Runner installed. Register with token (see commented runcmd)."

@@ -1,0 +1,14 @@
+#cloud-config
+# Ubuntu: Netdata via official kickstart.
+# UI on :19999 — restrict security group to your IP.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+
+runcmd:
+  - curl -fsSL https://get.netdata.cloud/kickstart.sh | bash -s -- --stable-channel --dont-wait --disable-telemetry
+
+final_message: "Netdata installed. Open http://<ip>:19999 (restrict access)."

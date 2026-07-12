@@ -1,0 +1,40 @@
+#cloud-config
+# Ubuntu: GitHub Actions self-hosted runner scaffold.
+# Requires a short-lived registration token from GitHub.
+# Set REPO_URL and RUNNER_TOKEN below before use.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - tar
+  - jq
+  - libicu-dev
+  - ca-certificates
+
+runcmd:
+  - |
+    set -e
+    REPO_URL="https://github.com/OWNER/REPO"
+    RUNNER_TOKEN="REPLACE_ME"
+    RUNNER_DIR=/opt/actions-runner
+    mkdir -p "$RUNNER_DIR"
+    cd "$RUNNER_DIR"
+    # Pin/update version as needed
+    VER=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name | sed 's/^v//')
+    ARCH=$(dpkg --print-architecture)
+    case "$ARCH" in
+      amd64) RARCH=x64 ;;
+      arm64) RARCH=arm64 ;;
+      *) RARCH=x64 ;;
+    esac
+    curl -fsSL -o actions-runner.tar.gz \
+      "https://github.com/actions/runner/releases/download/v${VER}/actions-runner-linux-${RARCH}-${VER}.tar.gz"
+    tar xzf actions-runner.tar.gz
+    # ./config.sh --url "$REPO_URL" --token "$RUNNER_TOKEN" --unattended --name "gozunga-$(hostname)" --labels "gozunga,self-hosted"
+    # ./svc.sh install
+    # ./svc.sh start
+    echo "Runner binaries installed in $RUNNER_DIR — configure with token when ready."
+
+final_message: "GitHub Actions runner binaries ready under /opt/actions-runner."

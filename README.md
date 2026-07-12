@@ -7,11 +7,18 @@ Paste any YAML into **Cloud configuration** when launching an instance.
 ## Layout
 
 ```
-coolify/     # PaaS installers
-gpu/         # NVIDIA / CUDA-ish GPU setup
-docker/      # Docker Engine from official repos
-apps/        # Language/runtime app starters
-desktop/     # Linux desktop environments + xrdp
+coolify/        # PaaS installers
+gpu/            # NVIDIA / GPU driver setup
+docker/         # Docker Engine (official repos)
+apps/           # Language/runtime app starters
+desktop/        # Linux desktop environments + xrdp
+proxy/          # Caddy / Nginx reverse proxies
+databases/      # Postgres / Redis single-node
+ci/             # GitLab Runner / GitHub Actions runner
+networking/     # WireGuard / Tailscale
+k8s/            # k3s single-node
+security/       # HashiCorp Vault bootstrap
+observability/  # Netdata / Prometheus+Grafana
 ```
 
 ## Coolify
@@ -20,7 +27,7 @@ desktop/     # Linux desktop environments + xrdp
 |------|---------|
 | [`coolify/ubuntu.yaml`](./coolify/ubuntu.yaml) | Install [Coolify](https://coolify.io) via official installer (matches [Gozunga Coolify guide](https://gozunga.com/technical-guides-and-how-tos/installing-coolify-on-gozunga-cloud)) |
 
-Open ports: `8000` (mgmt), optional `6001`/`6002`, plus `80`/`443` for apps.
+Ports: `8000` (mgmt), optional `6001`/`6002`, plus `80`/`443` for apps.
 
 ## GPU
 
@@ -30,7 +37,7 @@ Open ports: `8000` (mgmt), optional `6001`/`6002`, plus `80`/`443` for apps.
 
 ## Docker Engine (official repos)
 
-Uninstalls distro/default Docker packages first, then installs from Docker’s official repository.
+Uninstalls distro Docker packages first, then installs from Docker’s official repository.
 
 | File | Distro |
 |------|--------|
@@ -39,19 +46,20 @@ Uninstalls distro/default Docker packages first, then installs from Docker’s o
 
 ## App runtimes / starters
 
-Self-contained first-boot provisioners: toolchain + minimal app + systemd unit.
-
 | Stack | Ubuntu | Rocky / RHEL-style | Port |
 |-------|--------|--------------------|------|
 | Laravel (PHP-FPM + Nginx) | [`apps/ubuntu-laravel-nginx.yaml`](./apps/ubuntu-laravel-nginx.yaml) | [`apps/rocky-laravel-nginx.yaml`](./apps/rocky-laravel-nginx.yaml) | 80 |
 | Python FastAPI | [`apps/ubuntu-python-fastapi.yaml`](./apps/ubuntu-python-fastapi.yaml) | [`apps/rocky-python-fastapi.yaml`](./apps/rocky-python-fastapi.yaml) | 8000 |
+| Django + Gunicorn | [`apps/ubuntu-django.yaml`](./apps/ubuntu-django.yaml) | [`apps/rocky-django.yaml`](./apps/rocky-django.yaml) | 8000 |
 | Go HTTP | [`apps/ubuntu-go-web.yaml`](./apps/ubuntu-go-web.yaml) | [`apps/rocky-go-web.yaml`](./apps/rocky-go-web.yaml) | 8080 |
 | Rust (Axum) | [`apps/ubuntu-rust-web.yaml`](./apps/ubuntu-rust-web.yaml) | [`apps/rocky-rust-web.yaml`](./apps/rocky-rust-web.yaml) | 8080 |
 | Next.js | [`apps/ubuntu-nextjs.yaml`](./apps/ubuntu-nextjs.yaml) | [`apps/rocky-nextjs.yaml`](./apps/rocky-nextjs.yaml) | 3000 |
+| SvelteKit | [`apps/ubuntu-sveltekit.yaml`](./apps/ubuntu-sveltekit.yaml) | [`apps/rocky-sveltekit.yaml`](./apps/rocky-sveltekit.yaml) | 3000 |
+| TanStack Start | [`apps/ubuntu-tanstack-start.yaml`](./apps/ubuntu-tanstack-start.yaml) | [`apps/rocky-tanstack-start.yaml`](./apps/rocky-tanstack-start.yaml) | 3000 |
 
 ## Desktop environments
 
-Install a full GUI and enable **xrdp** (RDP on TCP/3389). First boot is large/slow — give it time, then reboot if needed.
+Install a full GUI and enable **xrdp** (RDP on TCP/3389). First boot is large/slow.
 
 | Desktop | Ubuntu | Rocky / Alma / RHEL-style |
 |---------|--------|---------------------------|
@@ -60,19 +68,63 @@ Install a full GUI and enable **xrdp** (RDP on TCP/3389). First boot is large/sl
 | KDE Plasma | [`desktop/ubuntu-kde.yaml`](./desktop/ubuntu-kde.yaml) | [`desktop/rocky-kde.yaml`](./desktop/rocky-kde.yaml) |
 | MATE | [`desktop/ubuntu-mate.yaml`](./desktop/ubuntu-mate.yaml) | [`desktop/rocky-mate.yaml`](./desktop/rocky-mate.yaml) |
 
-**Desktop notes**
-- Open security group **TCP/3389** for xrdp (and **22** if you want SSH).
-- These do **not** set a user password. Set one before RDP login, e.g. `sudo passwd ubuntu` / `sudo passwd rocky`.
-- Prefer XFCE on small VMs; GNOME/KDE want more RAM/CPU/disk.
-- RHEL-style group names can vary by release; scripts fall back to package installs when groups differ.
-- Graphical cloud images still need a console path (xrdp, VNC, or portal console).
+Desktop notes: set a password before RDP; open TCP/3389; prefer XFCE on small VMs.
+
+## Reverse proxy
+
+| File | Notes |
+|------|-------|
+| [`proxy/ubuntu-caddy-letsencrypt.yaml`](./proxy/ubuntu-caddy-letsencrypt.yaml) / [`proxy/rocky-caddy-letsencrypt.yaml`](./proxy/rocky-caddy-letsencrypt.yaml) | Caddy auto-HTTPS; edit Caddyfile domain/backend |
+| [`proxy/ubuntu-nginx-letsencrypt.yaml`](./proxy/ubuntu-nginx-letsencrypt.yaml) / [`proxy/rocky-nginx-letsencrypt.yaml`](./proxy/rocky-nginx-letsencrypt.yaml) | Nginx + Certbot; run certbot after DNS |
+
+Ports: `80`, `443`.
+
+## Databases
+
+| File | Notes |
+|------|-------|
+| [`databases/ubuntu-postgres.yaml`](./databases/ubuntu-postgres.yaml) / [`databases/rocky-postgres.yaml`](./databases/rocky-postgres.yaml) | Postgres, DB/user `app` / password `CHANGE_ME` |
+| [`databases/ubuntu-redis.yaml`](./databases/ubuntu-redis.yaml) / [`databases/rocky-redis.yaml`](./databases/rocky-redis.yaml) | Redis localhost + `requirepass CHANGE_ME` |
+
+## CI runners
+
+| File | Notes |
+|------|-------|
+| [`ci/ubuntu-gitlab-runner.yaml`](./ci/ubuntu-gitlab-runner.yaml) / [`ci/rocky-gitlab-runner.yaml`](./ci/rocky-gitlab-runner.yaml) | GitLab Runner + Docker; register with token |
+| [`ci/ubuntu-github-actions-runner.yaml`](./ci/ubuntu-github-actions-runner.yaml) / [`ci/rocky-github-actions-runner.yaml`](./ci/rocky-github-actions-runner.yaml) | Actions runner binaries; configure with short-lived token |
+
+## Networking
+
+| File | Notes |
+|------|-------|
+| [`networking/ubuntu-wireguard.yaml`](./networking/ubuntu-wireguard.yaml) / [`networking/rocky-wireguard.yaml`](./networking/rocky-wireguard.yaml) | WireGuard server scaffold, UDP/51820 |
+| [`networking/ubuntu-tailscale.yaml`](./networking/ubuntu-tailscale.yaml) / [`networking/rocky-tailscale.yaml`](./networking/rocky-tailscale.yaml) | Tailscale install; `tailscale up` with auth key |
+
+## Kubernetes
+
+| File | Notes |
+|------|-------|
+| [`k8s/ubuntu-k3s.yaml`](./k8s/ubuntu-k3s.yaml) / [`k8s/rocky-k3s.yaml`](./k8s/rocky-k3s.yaml) | Single-node k3s; kubeconfig copied for default user |
+
+## Security
+
+| File | Notes |
+|------|-------|
+| [`security/ubuntu-vault.yaml`](./security/ubuntu-vault.yaml) / [`security/rocky-vault.yaml`](./security/rocky-vault.yaml) | Vault single-node bootstrap on `:8200` (TLS off — not prod HA) |
+
+## Observability
+
+| File | Notes |
+|------|-------|
+| [`observability/ubuntu-netdata.yaml`](./observability/ubuntu-netdata.yaml) / [`observability/rocky-netdata.yaml`](./observability/rocky-netdata.yaml) | Netdata UI `:19999` |
+| [`observability/ubuntu-prometheus-grafana.yaml`](./observability/ubuntu-prometheus-grafana.yaml) / [`observability/rocky-prometheus-grafana.yaml`](./observability/rocky-prometheus-grafana.yaml) | Prometheus `:9090`, Grafana `:3000` (admin/admin) |
 
 ## Notes
 
 - **Security groups:** Gozunga instances deny inbound by default — open only what you need.
-- **First boot time:** Coolify, GPU drivers, Rust, Next.js, and full desktops can take many minutes.
-- **Not production hardened:** starter templates. Add SSH hardening, TLS, secrets, and backups for real workloads.
-- **Secrets:** avoid putting production passwords/API keys in userdata if it is retained or shared.
+- **First boot time:** desktops, Coolify, GPU drivers, Rust, Node scaffolds can take many minutes.
+- **Not production hardened:** starter templates. Change default passwords, enable TLS, and restrict access.
+- **Secrets:** avoid putting long-lived production secrets in userdata.
 
 ## Usage on Gozunga
 
@@ -81,20 +133,6 @@ Install a full GUI and enable **xrdp** (RDP on TCP/3389). First boot is large/sl
 3. Paste the YAML under **Cloud configuration**
 4. Attach a security group for the needed ports
 5. Confirm with `cloud-init status --wait` over SSH if desired
-
-## Other good future examples
-
-Ideas if we expand further:
-
-- Caddy or Nginx reverse proxy + Let’s Encrypt
-- Postgres / Redis single-node starters
-- GitLab Runner / GitHub Actions runner
-- WireGuard or Tailscale exit node
-- k3s single-node
-- HashiCorp Vault dev/prod bootstrap
-- Observability stack (Netdata, Prometheus + Grafana)
-- Windows-style remote desktop alternatives (TigerVNC)
-- TanStack Start / SvelteKit / Django
 
 ## Contributing
 

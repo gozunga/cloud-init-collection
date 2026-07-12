@@ -1,0 +1,19 @@
+#cloud-config
+# Ubuntu: install Tailscale and optionally join a tailnet.
+# Set TS_AUTHKEY (reusable auth key) before production use.
+# Docs: https://tailscale.com/kb/installation
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+
+runcmd:
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  - systemctl enable --now tailscaled
+  # Uncomment and set key:
+  # - tailscale up --auth-key=tskey-auth-REPLACE_ME --ssh
+
+final_message: "Tailscale installed. Run: tailscale up --auth-key=... "

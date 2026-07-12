@@ -1,0 +1,66 @@
+#cloud-config
+# Ubuntu: HashiCorp Vault single-node (dev-ish bootstrap, NOT prod HA).
+# Installs Vault package, writes a file-storage config, enables service.
+# You must still `vault operator init` / unseal after boot for non-dev mode.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - gpg
+  - lsb-release
+  - ca-certificates
+
+write_files:
+  - path: /etc/vault.d/vault.hcl
+    permissions: '0640'
+    content: |
+      ui = true
+      disable_mlock = true
+
+      storage "file" {
+        path = "/opt/vault/data"
+      }
+
+      listener "tcp" {
+        address     = "0.0.0.0:8200"
+        tls_disable = 1
+      }
+
+      api_addr = "http://127.0.0.1:8200"
+
+  - path: /etc/systemd/system/vault.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=HashiCorp Vault
+      After=network.target
+
+      [Service]
+      User=vault
+      Group=vault
+      ExecStart=/usr/bin/vault server -config=/etc/vault.d/vault.hcl
+      ExecReload=/bin/kill --signal HUP $MAINPID
+      KillMode=process
+      Restart=on-failure
+      LimitNOFILE=65536
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - |
+    set -e
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list
+    apt-get update -y
+    DEBIAN_FRONTEND=noninteractive apt-get install -y vault
+    id vault >/dev/null 2>&1 || useradd --system --home /etc/vault.d --shell /bin/false vault
+    mkdir -p /opt/vault/data /etc/vault.d
+    chown -R vault:vault /opt/vault /etc/vault.d
+    systemctl daemon-reload
+    systemctl enable --now vault
+  - echo 'export VAULT_ADDR=http://127.0.0.1:8200' > /etc/profile.d/vault.sh
+
+final_message: "Vault listening on :8200 (TLS disabled). Initialize/unseal before use."

@@ -1,0 +1,54 @@
+#cloud-config
+# Ubuntu: SvelteKit demo app on Node 22, systemd on :3000
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+  - git
+
+write_files:
+  - path: /etc/systemd/system/sveltekit-app.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=SvelteKit app
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=www-data
+      WorkingDirectory=/opt/sveltekit-app
+      Environment=NODE_ENV=production
+      Environment=PORT=3000
+      Environment=HOST=0.0.0.0
+      ExecStart=/usr/bin/node build
+      Restart=always
+      RestartSec=3
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - |
+    set -e
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+    if [ ! -f /opt/sveltekit-app/package.json ]; then
+      npm create --yes svelte@latest /opt/sveltekit-app -- --template skeleton --types ts --no-add-ons --no-install
+    fi
+    cd /opt/sveltekit-app
+    npm install
+    npm install -D @sveltejs/adapter-node
+    # Switch to node adapter if default is auto
+    if [ -f svelte.config.js ]; then
+      sed -i 's|@sveltejs/adapter-auto|@sveltejs/adapter-node|g' svelte.config.js || true
+    fi
+    npm run build
+    chown -R www-data:www-data /opt/sveltekit-app
+    systemctl daemon-reload
+    systemctl enable --now sveltekit-app
+
+final_message: "SvelteKit app listening on :3000"

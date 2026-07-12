@@ -1,0 +1,26 @@
+#cloud-config
+# Rocky/Alma: Redis single-node starter (localhost bind).
+# Set requirepass CHANGE_ME.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - redis
+
+runcmd:
+  - |
+    conf=/etc/redis/redis.conf
+    sed -i 's/^bind .*/bind 127.0.0.1 ::1/' "$conf" || true
+    if grep -q '^# requirepass' "$conf"; then
+      sed -i 's/^# requirepass.*/requirepass CHANGE_ME/' "$conf"
+    elif grep -q '^requirepass' "$conf"; then
+      sed -i 's/^requirepass.*/requirepass CHANGE_ME/' "$conf"
+    else
+      echo 'requirepass CHANGE_ME' >> "$conf"
+    fi
+    sed -i 's/^protected-mode no/protected-mode yes/' "$conf" || true
+  - systemctl enable --now redis
+  - systemctl restart redis
+
+final_message: "Redis ready on localhost with requirepass CHANGE_ME."
