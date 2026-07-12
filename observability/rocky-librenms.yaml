@@ -7,7 +7,7 @@
 #           https://github.com/librenms/docker
 #
 # First boot pulls several images; allow several minutes.
-# Change MYSQL_PASSWORD / SMTP settings under /opt/librenms before production use.
+# DB password is generated and saved to /opt/librenms/DB_PASSWORD.txt
 
 package_update: true
 package_upgrade: true
@@ -16,216 +16,50 @@ packages:
   - curl
   - ca-certificates
   - openssl
-
-write_files:
-  - path: /opt/librenms/compose.yml
-    permissions: '0644'
-    content: |
-      name: librenms
-
-      services:
-        db:
-          image: mariadb:10
-          container_name: librenms_db
-          command:
-            - "mysqld"
-            - "--innodb-file-per-table=1"
-            - "--lower-case-table-names=0"
-            - "--character-set-server=utf8mb4"
-            - "--collation-server=utf8mb4_unicode_ci"
-          volumes:
-            - "./db:/var/lib/mysql"
-          environment:
-            - "TZ=${TZ}"
-            - "MARIADB_RANDOM_ROOT_PASSWORD=yes"
-            - "MYSQL_DATABASE=${MYSQL_DATABASE}"
-            - "MYSQL_USER=${MYSQL_USER}"
-            - "MYSQL_PASSWORD=${MYSQL_PASSWORD}"
-          restart: always
-
-        redis:
-          image: redis:7.2-alpine
-          container_name: librenms_redis
-          environment:
-            - "TZ=${TZ}"
-          restart: always
-
-        msmtpd:
-          image: crazymax/msmtpd:latest
-          container_name: librenms_msmtpd
-          env_file:
-            - "./msmtpd.env"
-          restart: always
-
-        librenms:
-          image: librenms/librenms:latest
-          container_name: librenms
-          hostname: librenms
-          cap_add:
-            - NET_ADMIN
-            - NET_RAW
-          ports:
-            - "8000:8000"
-          depends_on:
-            - db
-            - redis
-            - msmtpd
-          volumes:
-            - "./librenms:/data"
-          env_file:
-            - "./librenms.env"
-          environment:
-            - "TZ=${TZ}"
-            - "PUID=${PUID}"
-            - "PGID=${PGID}"
-            - "DB_HOST=db"
-            - "DB_NAME=${MYSQL_DATABASE}"
-            - "DB_USER=${MYSQL_USER}"
-            - "DB_PASSWORD=${MYSQL_PASSWORD}"
-            - "DB_TIMEOUT=60"
-          restart: always
-
-        dispatcher:
-          image: librenms/librenms:latest
-          container_name: librenms_dispatcher
-          hostname: librenms-dispatcher
-          cap_add:
-            - NET_ADMIN
-            - NET_RAW
-          depends_on:
-            - librenms
-            - redis
-          volumes:
-            - "./librenms:/data"
-          env_file:
-            - "./librenms.env"
-          environment:
-            - "TZ=${TZ}"
-            - "PUID=${PUID}"
-            - "PGID=${PGID}"
-            - "DB_HOST=db"
-            - "DB_NAME=${MYSQL_DATABASE}"
-            - "DB_USER=${MYSQL_USER}"
-            - "DB_PASSWORD=${MYSQL_PASSWORD}"
-            - "DB_TIMEOUT=60"
-            - "DISPATCHER_NODE_ID=dispatcher1"
-            - "SIDECAR_DISPATCHER=1"
-          restart: always
-
-        syslogng:
-          image: librenms/librenms:latest
-          container_name: librenms_syslogng
-          hostname: librenms-syslogng
-          cap_add:
-            - NET_ADMIN
-            - NET_RAW
-          depends_on:
-            - librenms
-            - redis
-          ports:
-            - "514:514/tcp"
-            - "514:514/udp"
-          volumes:
-            - "./librenms:/data"
-          env_file:
-            - "./librenms.env"
-          environment:
-            - "TZ=${TZ}"
-            - "PUID=${PUID}"
-            - "PGID=${PGID}"
-            - "DB_HOST=db"
-            - "DB_NAME=${MYSQL_DATABASE}"
-            - "DB_USER=${MYSQL_USER}"
-            - "DB_PASSWORD=${MYSQL_PASSWORD}"
-            - "DB_TIMEOUT=60"
-            - "SIDECAR_SYSLOGNG=1"
-          restart: always
-
-        snmptrapd:
-          image: librenms/librenms:latest
-          container_name: librenms_snmptrapd
-          hostname: librenms-snmptrapd
-          cap_add:
-            - NET_ADMIN
-            - NET_RAW
-          depends_on:
-            - librenms
-            - redis
-          ports:
-            - "162:162/tcp"
-            - "162:162/udp"
-          volumes:
-            - "./librenms:/data"
-          env_file:
-            - "./librenms.env"
-          environment:
-            - "TZ=${TZ}"
-            - "PUID=${PUID}"
-            - "PGID=${PGID}"
-            - "DB_HOST=db"
-            - "DB_NAME=${MYSQL_DATABASE}"
-            - "DB_USER=${MYSQL_USER}"
-            - "DB_PASSWORD=${MYSQL_PASSWORD}"
-            - "DB_TIMEOUT=60"
-            - "SIDECAR_SNMPTRAPD=1"
-          restart: always
-
-  - path: /opt/librenms/librenms.env
-    permissions: '0644'
-    content: |
-      MEMORY_LIMIT=256M
-      MAX_INPUT_VARS=1000
-      UPLOAD_MAX_SIZE=16M
-      OPCACHE_MEM_SIZE=128
-      REAL_IP_FROM=0.0.0.0/32
-      REAL_IP_HEADER=X-Forwarded-For
-      LOG_IP_VAR=remote_addr
-
-      CACHE_DRIVER=redis
-      SESSION_DRIVER=redis
-      REDIS_HOST=redis
-
-      LIBRENMS_SNMP_COMMUNITY=librenmsdocker
-
-      LIBRENMS_WEATHERMAP=false
-      LIBRENMS_WEATHERMAP_SCHEDULE=*/5 * * * *
-
-  - path: /opt/librenms/msmtpd.env
-    permissions: '0644'
-    content: |
-      # Optional mail relay — replace with real SMTP if you want alerts by email
-      # https://github.com/crazy-max/docker-msmtpd
-      SMTP_HOST=smtp.example.com
-      SMTP_PORT=587
-      SMTP_TLS=on
-      SMTP_STARTTLS=on
-      SMTP_TLS_CHECKCERT=on
-      SMTP_AUTH=on
-      SMTP_USER=CHANGE_ME
-      SMTP_PASSWORD=CHANGE_ME
-      SMTP_FROM=librenms@example.com
+  - tar
 
 runcmd:
   - curl -fsSL https://get.docker.com | sh
   - systemctl enable --now docker
   - |
-    set -e
+    set -euo pipefail
+    install -d -m 0755 /opt/librenms
     cd /opt/librenms
-    # Generate a random DB password if not customized
-    DBPASS=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)
-    cat > .env <<ENV
-    TZ=UTC
-    PUID=1000
-    PGID=1000
-    MYSQL_DATABASE=librenms
-    MYSQL_USER=librenms
-    MYSQL_PASSWORD=${DBPASS}
-    ENV
-    # strip accidental leading spaces from YAML-indented heredoc
-    sed -i 's/^[[:space:]]\+//' .env
-    echo "LibreNMS DB password: ${DBPASS}" | tee /opt/librenms/DB_PASSWORD.txt
+
+    # Pull official example compose files (avoids fragile nested cloud-config YAML)
+    curl -fsSL https://raw.githubusercontent.com/librenms/docker/master/examples/compose/compose.yml -o compose.yml
+    curl -fsSL https://raw.githubusercontent.com/librenms/docker/master/examples/compose/librenms.env -o librenms.env
+    curl -fsSL https://raw.githubusercontent.com/librenms/docker/master/examples/compose/msmtpd.env -o msmtpd.env
+
+    # Placeholder SMTP values (edit later if you want email alerts)
+    cat > msmtpd.env <<'SMTP'
+    SMTP_HOST=smtp.example.com
+    SMTP_PORT=587
+    SMTP_TLS=on
+    SMTP_STARTTLS=on
+    SMTP_TLS_CHECKCERT=on
+    SMTP_AUTH=on
+    SMTP_USER=CHANGE_ME
+    SMTP_PASSWORD=CHANGE_ME
+    SMTP_FROM=librenms@example.com
+    SMTP
+    sed -i 's/^[[:space:]]\+//' msmtpd.env
+
+    DBPASS="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)"
+    printf '%s\n' \
+      'TZ=UTC' \
+      'PUID=1000' \
+      'PGID=1000' \
+      'MYSQL_DATABASE=librenms' \
+      'MYSQL_USER=librenms' \
+      "MYSQL_PASSWORD=${DBPASS}" \
+      > .env
+
+    umask 077
+    printf '%s\n' "${DBPASS}" > /opt/librenms/DB_PASSWORD.txt
     chmod 600 /opt/librenms/DB_PASSWORD.txt
-    docker compose up -d
-    docker compose ps
+
+    docker compose -f compose.yml --env-file .env up -d
+    docker compose -f compose.yml ps
 
 final_message: "LibreNMS stack is up on :8000. DB password saved in /opt/librenms/DB_PASSWORD.txt"
