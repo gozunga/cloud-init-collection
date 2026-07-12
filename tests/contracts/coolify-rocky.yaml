@@ -1,0 +1,19 @@
+# Contract: Coolify on Rocky Linux via official installer
+# Requires reboot (kernel modules) + SELinux unconfined context on oneshot
+name: coolify-rocky
+example: coolify/rocky.yaml
+image: rocky-10
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: rocky
+probe: basic
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - system reboots for kernel modules
+  - install-coolify.service completes
+  - SELinux remains enforcing
+  - port 8000 returns HTTP 200
+  - Coolify login/register page loads

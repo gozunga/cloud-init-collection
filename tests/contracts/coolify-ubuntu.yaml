@@ -1,0 +1,15 @@
+# Contract: Coolify on Ubuntu via official installer
+name: coolify-ubuntu
+example: coolify/ubuntu.yaml
+image: ubuntu-26.04
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: basic
+cloud_init_timeout_seconds: 1200
+expect:
+  - cloud-init status succeeds
+  - port 8000 returns HTTP 200
+  - Coolify login/register page loads
