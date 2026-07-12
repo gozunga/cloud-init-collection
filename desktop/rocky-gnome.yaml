@@ -1,0 +1,38 @@
+#cloud-config
+# Rocky/Alma/RHEL-style GNOME Workstation desktop.
+# Uses Server with GUI group + GNOME packages.
+# Open security group TCP/3389 if using xrdp.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - '@Server with GUI'
+  - gnome-shell
+  - gnome-terminal
+  - gdm
+  - xrdp
+  - firefox
+
+runcmd:
+  - systemctl set-default graphical.target
+  - systemctl enable gdm || true
+  - systemctl enable --now xrdp || true
+  # SELinux: allow xrdp (best-effort)
+  - setsebool -P xrdp_can_connect_all 1 || true
+  - |
+    for u in rocky alma cloud-user; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'gnome-session' > "/home/$u/.Xclients"
+        chown "$u:$u" "/home/$u/.Xclients"
+        chmod +x "/home/$u/.Xclients"
+      fi
+    done
+
+power_state:
+  mode: reboot
+  message: "Rebooting into Rocky/Alma GNOME desktop"
+  timeout: 30
+  condition: true
+
+final_message: "Rocky/Alma GNOME desktop install finished after $UPTIME seconds."

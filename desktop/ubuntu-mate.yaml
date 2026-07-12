@@ -1,0 +1,37 @@
+#cloud-config
+# Ubuntu MATE desktop — solid middle ground for cloud desktop VMs.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ubuntu-mate-desktop
+  - lightdm
+  - xrdp
+  - dbus-x11
+
+runcmd:
+  - |
+    DEBIAN_FRONTEND=noninteractive debconf-set-selections <<'SEL'
+    lightdm shared/default-x-display-manager select lightdm
+    SEL
+  - dpkg-reconfigure -f noninteractive lightdm || true
+  - systemctl enable lightdm || true
+  - systemctl set-default graphical.target
+  - systemctl enable --now xrdp || true
+  - adduser xrdp ssl-cert || true
+  - |
+    for u in ubuntu; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'mate-session' > "/home/$u/.xsession"
+        chown "$u:$u" "/home/$u/.xsession"
+      fi
+    done
+
+power_state:
+  mode: reboot
+  message: "Rebooting into Ubuntu MATE desktop"
+  timeout: 30
+  condition: true
+
+final_message: "Ubuntu MATE desktop install finished after $UPTIME seconds."

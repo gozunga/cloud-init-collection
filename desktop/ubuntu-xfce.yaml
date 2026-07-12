@@ -1,0 +1,41 @@
+#cloud-config
+# Ubuntu XFCE desktop (lighter than full GNOME).
+# Good default for cloud VMs + xrdp.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - xfce4
+  - xfce4-goodies
+  - xorg
+  - lightdm
+  - xrdp
+  - dbus-x11
+  - firefox
+
+runcmd:
+  - |
+    DEBIAN_FRONTEND=noninteractive debconf-set-selections <<'SEL'
+    lightdm shared/default-x-display-manager select lightdm
+    SEL
+  - dpkg-reconfigure -f noninteractive lightdm || true
+  - systemctl enable lightdm || true
+  - systemctl set-default graphical.target
+  - systemctl enable --now xrdp || true
+  - adduser xrdp ssl-cert || true
+  - |
+    for u in ubuntu; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'xfce4-session' > "/home/$u/.xsession"
+        chown "$u:$u" "/home/$u/.xsession"
+      fi
+    done
+
+power_state:
+  mode: reboot
+  message: "Rebooting into Ubuntu XFCE desktop"
+  timeout: 30
+  condition: true
+
+final_message: "Ubuntu XFCE desktop install finished after $UPTIME seconds."

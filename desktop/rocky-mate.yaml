@@ -1,0 +1,36 @@
+#cloud-config
+# Rocky/Alma/RHEL-style MATE desktop (via EPEL / group packages).
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - epel-release
+  - lightdm
+  - xrdp
+  - firefox
+
+runcmd:
+  - dnf install -y epel-release || true
+  - dnf groupinstall -y "MATE Desktop" || dnf install -y @mate-desktop-environment || dnf install -y mate-desktop mate-session-manager mate-terminal caja || true
+  - dnf install -y lightdm xrdp || true
+  - systemctl set-default graphical.target
+  - systemctl enable lightdm || true
+  - systemctl enable --now xrdp || true
+  - setsebool -P xrdp_can_connect_all 1 || true
+  - |
+    for u in rocky alma cloud-user; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'mate-session' > "/home/$u/.Xclients"
+        chown "$u:$u" "/home/$u/.Xclients"
+        chmod +x "/home/$u/.Xclients"
+      fi
+    done
+
+power_state:
+  mode: reboot
+  message: "Rebooting into Rocky/Alma MATE desktop"
+  timeout: 30
+  condition: true
+
+final_message: "Rocky/Alma MATE desktop install finished after $UPTIME seconds."

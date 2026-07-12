@@ -1,0 +1,38 @@
+#cloud-config
+# Ubuntu KDE Plasma desktop (kubuntu-desktop).
+# Large install; first boot can take a long time.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - kubuntu-desktop
+  - sddm
+  - xrdp
+  - dbus-x11
+
+runcmd:
+  - |
+    DEBIAN_FRONTEND=noninteractive debconf-set-selections <<'SEL'
+    sddm shared/default-x-display-manager select sddm
+    SEL
+  - dpkg-reconfigure -f noninteractive sddm || true
+  - systemctl enable sddm || true
+  - systemctl set-default graphical.target
+  - systemctl enable --now xrdp || true
+  - adduser xrdp ssl-cert || true
+  - |
+    for u in ubuntu; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'startplasma-x11' > "/home/$u/.xsession"
+        chown "$u:$u" "/home/$u/.xsession"
+      fi
+    done
+
+power_state:
+  mode: reboot
+  message: "Rebooting into Ubuntu KDE Plasma desktop"
+  timeout: 30
+  condition: true
+
+final_message: "Ubuntu KDE Plasma desktop install finished after $UPTIME seconds."

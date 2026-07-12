@@ -1,0 +1,37 @@
+#cloud-config
+# Rocky/Alma/RHEL-style KDE Plasma desktop.
+# Large install; EPEL may be required depending on release.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - epel-release
+  - sddm
+  - xrdp
+  - firefox
+
+runcmd:
+  - dnf install -y epel-release || true
+  - dnf groupinstall -y "KDE Plasma Workspaces" || dnf install -y @kde-desktop-environment || dnf install -y plasma-workspace plasma-desktop sddm || true
+  - dnf install -y sddm xrdp || true
+  - systemctl set-default graphical.target
+  - systemctl enable sddm || true
+  - systemctl enable --now xrdp || true
+  - setsebool -P xrdp_can_connect_all 1 || true
+  - |
+    for u in rocky alma cloud-user; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'startplasma-x11' > "/home/$u/.Xclients"
+        chown "$u:$u" "/home/$u/.Xclients"
+        chmod +x "/home/$u/.Xclients"
+      fi
+    done
+
+power_state:
+  mode: reboot
+  message: "Rebooting into Rocky/Alma KDE Plasma desktop"
+  timeout: 30
+  condition: true
+
+final_message: "Rocky/Alma KDE Plasma desktop install finished after $UPTIME seconds."

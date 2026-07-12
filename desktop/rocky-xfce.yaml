@@ -1,0 +1,40 @@
+#cloud-config
+# Rocky/Alma/RHEL-style XFCE desktop (lighter GUI option).
+# Requires EPEL for xfce packages on many RHEL-style releases.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - epel-release
+  - xorg-x11-server-Xorg
+  - xorg-x11-xauth
+  - xorg-x11-drivers
+  - lightdm
+  - xrdp
+  - firefox
+
+runcmd:
+  - dnf install -y epel-release || true
+  - dnf groupinstall -y "Xfce" || dnf install -y @xfce-desktop-environment || dnf install -y xfce4-session xfce4-panel thunar xfce4-terminal || true
+  - dnf install -y lightdm xrdp || true
+  - systemctl set-default graphical.target
+  - systemctl enable lightdm || true
+  - systemctl enable --now xrdp || true
+  - setsebool -P xrdp_can_connect_all 1 || true
+  - |
+    for u in rocky alma cloud-user; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'startxfce4' > "/home/$u/.Xclients"
+        chown "$u:$u" "/home/$u/.Xclients"
+        chmod +x "/home/$u/.Xclients"
+      fi
+    done
+
+power_state:
+  mode: reboot
+  message: "Rebooting into Rocky/Alma XFCE desktop"
+  timeout: 30
+  condition: true
+
+final_message: "Rocky/Alma XFCE desktop install finished after $UPTIME seconds."
