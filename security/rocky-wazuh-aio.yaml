@@ -9,6 +9,20 @@
 # Needs a decent VM (4+ vCPU / 8+ GB RAM recommended). First boot can take 10–20+ minutes.
 # Credentials/passwords are written under /root and installer logs at /var/log/wazuh-install.log
 
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+             -e 's/^[[:space:]]*metalink=/# metalink=/' "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+             -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+             -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' "$f"
+    done
+
 package_update: true
 package_upgrade: true
 

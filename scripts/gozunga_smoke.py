@@ -491,16 +491,17 @@ def run_probes(profile: str, ip: str, user: str, identity: str, cloud_init_timeo
             write_status("SSH down after cloud-init wait; waiting for reboot recovery")
             time.sleep(15)
             wait_for_ssh(ip, user, identity, timeout=DEFAULT_SSH_READY_TIMEOUT)
-        # (Re-)check cloud-init status now that SSH is up
+        # (Re-)check cloud-init status now that SSH is up.
+        # Use --wait so we don't snapshot mid-run on a rebooted system.
         recheck = ssh_run(
             ip, user, identity,
-            "sudo -n cloud-init status --long || cloud-init status --long || true",
-            timeout=120, check=False,
+            "sudo -n cloud-init status --wait --long || sudo -n cloud-init status --wait || sudo -n cloud-init status --long || true",
+            timeout=cloud_init_timeout, check=False,
         )
         logs.append(f"recheck cloud-init status:\nrc={recheck.returncode}\n{recheck.stdout}\n{recheck.stderr}")
         write_status(f"recheck rc={recheck.returncode} stdout={repr((recheck.stdout or '')[:300])}")
         recheck_text = (recheck.stdout or "").lower()
-        if re.search(r"^status:\s*(done|degraded)", recheck_text, re.M):
+        if re.search(r"status:\s*(done|degraded)", recheck_text):
             write_status("cloud-init completed (confirmed after reconnect)")
             proc = recheck  # fall through to normal status evaluation
         else:

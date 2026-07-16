@@ -1,7 +1,9 @@
 #cloud-config
-# Ubuntu NVIDIA open-kernel drivers (headless).
-# Use with GPU-flavored instances. Installs nvidia-driver-595-server-open + nvtop.
-# After boot: run nvidia-smi to verify the GPU is detected.
+# Ubuntu KDE Plasma desktop + NVIDIA GPU drivers (open-kernel).
+# Use with GPU-flavored instances (e.g. ac.nvidia_l40s1, ac.nvidia_rtx2000pro1).
+# Large install; first boot can take 10-15 minutes.
+# After boot: RDP on TCP/3389, nvidia-smi to verify GPU.
+
 bootcmd:
   - |
     for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
@@ -23,6 +25,12 @@ apt:
 package_update: true
 package_upgrade: true
 
+packages:
+  - kubuntu-desktop
+  - sddm
+  - xrdp
+  - dbus-x11
+
 write_files:
   - path: /etc/modprobe.d/blacklist-nouveau.conf
     content: |
@@ -38,8 +46,25 @@ runcmd:
   - add-apt-repository ppa:graphics-drivers/ppa -y
   - apt update -y
   - apt install -y nvidia-driver-595-server-open nvtop
+  - |
+    echo 'sddm shared/default-x-display-manager select sddm' | debconf-set-selections
+  - dpkg-reconfigure -f noninteractive sddm || true
+  - systemctl enable sddm || true
+  - systemctl set-default graphical.target
+  - systemctl enable --now xrdp || true
+  - adduser xrdp ssl-cert || true
+  - |
+    for u in ubuntu; do
+      if id "$u" >/dev/null 2>&1; then
+        printf '%s\n' 'startplasma-x11' > "/home/$u/.xsession"
+        chown "$u:$u" "/home/$u/.xsession"
+      fi
+    done
 
 power_state:
   mode: reboot
-  message: "Rebooting to load NVIDIA drivers"
-  timeout: 1
+  message: "Rebooting into Ubuntu KDE Plasma desktop with NVIDIA drivers"
+  timeout: 30
+  condition: true
+
+final_message: "Ubuntu KDE Plasma desktop + NVIDIA GPU install finished after $UPTIME seconds."

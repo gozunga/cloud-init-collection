@@ -2,9 +2,25 @@
 # Rocky/Alma: Nginx + Certbot (Let's Encrypt).
 # Replace example.com / email before use.
 # Open security group TCP/80 and TCP/443.
+# certbot and python3-certbot-nginx require EPEL on Rocky/Alma 10.
 
 package_update: true
 package_upgrade: true
+
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+             -e 's/^[[:space:]]*metalink=/# metalink=/' "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+             -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+             -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' "$f"
+    done
+  - dnf install -y epel-release
 
 packages:
   - nginx

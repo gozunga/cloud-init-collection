@@ -70,6 +70,19 @@ Install a full GUI and enable **xrdp** (RDP on TCP/3389). First boot is large/sl
 
 Desktop notes: set a password before RDP; open TCP/3389; prefer XFCE on small VMs.
 
+### Desktop + GPU
+
+For GPU-flavored instances (e.g. `ac.nvidia_l40s1`, `ac.nvidia_rtx2000pro1`), use the GPU variants — they include NVIDIA open-kernel driver installation, Nouveau blacklisting, and `nvtop`.
+
+| Desktop | Ubuntu + GPU |
+|---------|-------------|
+| GNOME | [`desktop/ubuntu-gnome-gpu.yaml`](./desktop/ubuntu-gnome-gpu.yaml) |
+| XFCE (lighter) | [`desktop/ubuntu-xfce-gpu.yaml`](./desktop/ubuntu-xfce-gpu.yaml) |
+| KDE Plasma | [`desktop/ubuntu-kde-gpu.yaml`](./desktop/ubuntu-kde-gpu.yaml) |
+| MATE | [`desktop/ubuntu-mate-gpu.yaml`](./desktop/ubuntu-mate-gpu.yaml) |
+
+GPU desktop notes: allow 10–15 minutes for first boot (drivers + desktop install). Verify with `nvidia-smi` after RDP login.
+
 ## Reverse proxy
 
 | File | Notes |

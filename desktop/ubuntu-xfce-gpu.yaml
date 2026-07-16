@@ -1,5 +1,9 @@
 #cloud-config
-# Ubuntu MATE desktop — solid middle ground for cloud desktop VMs.
+# Ubuntu XFCE desktop + NVIDIA GPU drivers (open-kernel).
+# Use with GPU-flavored instances (e.g. ac.nvidia_l40s1, ac.nvidia_rtx2000pro1).
+# XFCE is lighter than GNOME — good for remote GPU workstations.
+# First boot is large/slow — allow 10-15 minutes.
+# After boot: RDP on TCP/3389, nvidia-smi to verify GPU.
 
 bootcmd:
   - |
@@ -23,12 +27,29 @@ package_update: true
 package_upgrade: true
 
 packages:
-  - ubuntu-mate-desktop
+  - xfce4
+  - xfce4-goodies
+  - xorg
   - lightdm
   - xrdp
   - dbus-x11
+  - firefox
+
+write_files:
+  - path: /etc/modprobe.d/blacklist-nouveau.conf
+    content: |
+      blacklist nouveau
+      blacklist lbm-nouveau
+      options nouveau modeset=0
+      alias nouveau off
+      alias lbm-nouveau off
+    permissions: '0644'
 
 runcmd:
+  - update-initramfs -u
+  - add-apt-repository ppa:graphics-drivers/ppa -y
+  - apt update -y
+  - apt install -y nvidia-driver-595-server-open nvtop
   - |
     echo 'lightdm shared/default-x-display-manager select lightdm' | debconf-set-selections
   - dpkg-reconfigure -f noninteractive lightdm || true
@@ -39,15 +60,15 @@ runcmd:
   - |
     for u in ubuntu; do
       if id "$u" >/dev/null 2>&1; then
-        printf '%s\n' 'mate-session' > "/home/$u/.xsession"
+        printf '%s\n' 'xfce4-session' > "/home/$u/.xsession"
         chown "$u:$u" "/home/$u/.xsession"
       fi
     done
 
 power_state:
   mode: reboot
-  message: "Rebooting into Ubuntu MATE desktop"
+  message: "Rebooting into Ubuntu XFCE desktop with NVIDIA drivers"
   timeout: 30
   condition: true
 
-final_message: "Ubuntu MATE desktop install finished after $UPTIME seconds."
+final_message: "Ubuntu XFCE desktop + NVIDIA GPU install finished after $UPTIME seconds."

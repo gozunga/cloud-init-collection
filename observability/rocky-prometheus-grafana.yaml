@@ -2,6 +2,20 @@
 # Rocky/Alma: lightweight Prometheus + Grafana via Docker Compose.
 # Grafana :3000 (admin/admin — change immediately), Prometheus :9090.
 
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+             -e 's/^[[:space:]]*metalink=/# metalink=/' "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+             -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+             -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' "$f"
+    done
+
 package_update: true
 package_upgrade: true
 
@@ -49,8 +63,43 @@ write_files:
             - targets: ["prometheus:9090"]
 
 runcmd:
-  - curl -fsSL https://get.docker.com | sh
-  - systemctl enable --now docker
-  - cd /opt/observability && docker compose up -d
+  - dnf install -y dnf-plugins-core
+  - dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  - dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable docker
+  - |
+    # Create systemd service so compose starts after reboot if kernel was upgraded
+    cat > /etc/systemd/system/observability-stack.service << 'EOF'
+    [Unit]
+    Description=Prometheus + Grafana stack
+    After=docker.service
+    Requires=docker.service
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    WorkingDirectory=/opt/observability
+    ExecStart=/usr/bin/docker compose up -d
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    systemctl daemon-reload
+    systemctl enable observability-stack
+  - |
+    running_kern=$(uname -r)
+    newest_kern=$(ls -1 /lib/modules | sort -V | tail -1)
+    if [ "$running_kern" = "$newest_kern" ]; then
+      systemctl start docker
+      cd /opt/observability && docker compose up -d
+    else
+      echo "Kernel upgraded ($running_kern -> $newest_kern); compose will start after reboot."
+    fi
+
+power_state:
+  delay: "now"
+  mode: reboot
+  message: "Rebooting after kernel module upgrade for Docker."
+  condition: |
+    #!/bin/bash
+    [ "$(uname -r)" != "$(ls -1 /lib/modules | sort -V | tail -1)" ]
 
 final_message: "Prometheus :9090 and Grafana :3000 (admin/admin) are up."

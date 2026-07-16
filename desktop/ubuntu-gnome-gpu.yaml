@@ -1,16 +1,10 @@
 #cloud-config
-# Ubuntu Desktop (GNOME) via ubuntu-desktop metapackage.
-# Heavy install; first boot can take a long time.
-#
-# After install:
-# - Console/local display: graphical.target
-# - Remote: use RDP (xrdp) or attach a console in your hypervisor/portal
-#
-# Optional: set a password with chpasswd (disabled by default for safety).
+# Ubuntu GNOME desktop + NVIDIA GPU drivers (open-kernel).
+# Use with GPU-flavored instances (e.g. ac.nvidia_l40s1, ac.nvidia_rtx2000pro1).
+# Installs NVIDIA drivers, GNOME desktop, and xrdp for remote access.
+# First boot is large/slow — allow 10-15 minutes.
+# After boot: RDP on TCP/3389, nvidia-smi to verify GPU.
 
-# Force the mirror early, before cloud-init's apt module runs.
-# Ubuntu 24.04+ uses DEB822 format (/etc/apt/sources.list.d/ubuntu.sources),
-# which cloud-init's apt:primary: key may not update in time.
 bootcmd:
   - |
     for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
@@ -38,12 +32,25 @@ packages:
   - xrdp
   - dbus-x11
 
+write_files:
+  - path: /etc/modprobe.d/blacklist-nouveau.conf
+    content: |
+      blacklist nouveau
+      blacklist lbm-nouveau
+      options nouveau modeset=0
+      alias nouveau off
+      alias lbm-nouveau off
+    permissions: '0644'
+
 runcmd:
+  - update-initramfs -u
+  - add-apt-repository ppa:graphics-drivers/ppa -y
+  - apt update -y
+  - apt install -y nvidia-driver-595-server-open nvtop
   - systemctl enable gdm3 || true
   - systemctl set-default graphical.target
   - systemctl enable --now xrdp || true
   - adduser xrdp ssl-cert || true
-  # Prefer GNOME session for xrdp users
   - |
     for u in ubuntu; do
       if id "$u" >/dev/null 2>&1; then
@@ -56,8 +63,8 @@ runcmd:
 
 power_state:
   mode: reboot
-  message: "Rebooting into Ubuntu GNOME desktop"
+  message: "Rebooting into Ubuntu GNOME desktop with NVIDIA drivers"
   timeout: 30
   condition: true
 
-final_message: "Ubuntu GNOME desktop install finished after $UPTIME seconds. Reboot may be required."
+final_message: "Ubuntu GNOME desktop + NVIDIA GPU install finished after $UPTIME seconds."

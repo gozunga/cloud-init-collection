@@ -6,6 +6,14 @@
 # After boot, open: http://<server-ip>:8000
 # Open security group ports: 8000 (mgmt), 6001/6002 (optional), 80/443 (apps)
 
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
 package_update: true
 package_upgrade: true
 

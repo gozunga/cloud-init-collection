@@ -3,6 +3,24 @@
 # Replace example.com and app backend before use.
 # Open security group TCP/80 and TCP/443.
 
+bootcmd:
+  - |
+    for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+      [ -f "$f" ] && sed -i \
+        -e 's|https\?://archive\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://security\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://ports\.ubuntu\.com/ubuntu-ports|https://mirror.gozunga.com/ubuntu|g' \
+        "$f" || true
+    done
+
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
 package_update: true
 package_upgrade: true
 
@@ -13,15 +31,6 @@ packages:
   - curl
   - gnupg
 
-write_files:
-  - path: /etc/caddy/Caddyfile
-    permissions: '0644'
-    content: |
-      # Replace with your domain and backend
-      example.com {
-          reverse_proxy 127.0.0.1:3000
-      }
-
 runcmd:
   - |
     set -e
@@ -29,6 +38,14 @@ runcmd:
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
     apt-get update -y
     DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+    # Write Caddyfile AFTER install to avoid dpkg conffile prompt
+    mkdir -p /etc/caddy
+    cat > /etc/caddy/Caddyfile << 'EOF'
+    # Replace with your domain and backend
+    example.com {
+        reverse_proxy 127.0.0.1:3000
+    }
+    EOF
     systemctl enable --now caddy
     systemctl reload caddy || systemctl restart caddy
 

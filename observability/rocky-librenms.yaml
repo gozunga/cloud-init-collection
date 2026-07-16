@@ -9,6 +9,20 @@
 # First boot pulls several images; allow several minutes.
 # DB password is generated and saved to /opt/librenms/DB_PASSWORD.txt
 
+bootcmd:
+  - |
+    set -eu
+    mirror_root='https://mirror.gozunga.com/rocky-linux'
+    for f in /etc/yum.repos.d/rocky*.repo /etc/yum.repos.d/Rocky*.repo; do
+      [ -f "$f" ] || continue
+      sed -i -e 's/^[[:space:]]*mirrorlist=/# mirrorlist=/' \
+             -e 's/^[[:space:]]*metalink=/# metalink=/' "$f"
+      sed -i -e 's/^[[:space:]]*#[[:space:]]*baseurl=/baseurl=/' "$f"
+      sed -i -e 's|https\?://[^/]*rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' \
+             -e 's|https\?://[^/]*rockylinux\.org/pub/rocky|'"${mirror_root}"'|g' \
+             -e 's|https\?://dl\.rockylinux\.org/\$contentdir|'"${mirror_root}"'|g' "$f"
+    done
+
 package_update: true
 package_upgrade: true
 
@@ -19,8 +33,10 @@ packages:
   - tar
 
 runcmd:
-  - curl -fsSL https://get.docker.com | sh
-  - systemctl enable --now docker
+  - dnf install -y dnf-plugins-core
+  - dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  - dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl enable docker
   - |
     set -euo pipefail
     install -d -m 0755 /opt/librenms
@@ -58,7 +74,38 @@ runcmd:
     printf '%s\n' "${DBPASS}" > /opt/librenms/DB_PASSWORD.txt
     chmod 600 /opt/librenms/DB_PASSWORD.txt
 
-    docker compose -f compose.yml --env-file .env up -d
-    docker compose -f compose.yml ps
+    # Start compose now only if kernel wasn't upgraded; otherwise it starts via service after reboot
+    running_kern=$(uname -r)
+    newest_kern=$(ls -1 /lib/modules | sort -V | tail -1)
+    if [ "$running_kern" = "$newest_kern" ]; then
+      systemctl start docker
+      docker compose -f compose.yml --env-file .env up -d
+      docker compose -f compose.yml ps
+    else
+      echo "Kernel upgraded; LibreNMS will start after reboot."
+      cat > /etc/systemd/system/librenms-stack.service << 'EOF'
+      [Unit]
+      Description=LibreNMS Docker Compose stack
+      After=docker.service
+      Requires=docker.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/librenms
+      ExecStart=/usr/bin/docker compose -f compose.yml --env-file .env up -d
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      systemctl daemon-reload
+      systemctl enable librenms-stack
+    fi
+
+power_state:
+  delay: "now"
+  mode: reboot
+  message: "Rebooting after kernel module upgrade for Docker."
+  condition: |
+    #!/bin/bash
+    [ "$(uname -r)" != "$(ls -1 /lib/modules | sort -V | tail -1)" ]
 
 final_message: "LibreNMS stack is up on :8000. DB password saved in /opt/librenms/DB_PASSWORD.txt"
