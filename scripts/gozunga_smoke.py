@@ -262,7 +262,7 @@ def ensure_security_group(name: str) -> None:
             timeout=60,
         )
 
-    for port in (22, 80, 443, 3000, 8000, 8080, 9090, 19999):
+    for port in (22, 80, 443, 3000, 3456, 8000, 8080, 9090, 19999):
         ensure_tcp(port)
     ensure_udp(51820)
     ensure_icmp()
@@ -633,6 +633,54 @@ def run_probes(profile: str, ip: str, user: str, identity: str, cloud_init_timeo
         if role.returncode != 0 or "app" not in (role.stdout or ""):
             raise SmokeError("app role not found")
         write_status("app role verified")
+    elif profile == "jean":
+        write_status("running jean-server probes")
+        # 1. systemd service must be active
+        for attempt in range(1, 13):
+            svc = ssh_run(
+                ip, user, identity,
+                "sudo -n systemctl is-active jean-server",
+                timeout=30, check=False,
+            )
+            logs.append(f"jean systemctl is-active attempt {attempt}:\nrc={svc.returncode}\n{svc.stdout}\n{svc.stderr}")
+            if svc.returncode == 0 and "active" in (svc.stdout or "").strip():
+                write_status("jean-server systemd service is active")
+                break
+            write_status(f"jean-server not active yet (attempt {attempt}): {(svc.stdout or '').strip()}")
+            time.sleep(10)
+        else:
+            diag = ssh_run(
+                ip, user, identity,
+                "sudo -n systemctl status jean-server --no-pager || true; "
+                "sudo -n journalctl -u jean-server -n 50 --no-pager || true",
+                timeout=60, check=False,
+            )
+            logs.append(f"jean-server diagnostics:\n{diag.stdout}\n{diag.stderr}")
+            raise SmokeError("jean-server systemd service never became active")
+        # 2. HTTP port 3456 must respond (any HTTP response = server is up)
+        for attempt in range(1, 7):
+            http = ssh_run(
+                ip, user, identity,
+                "curl -s -o /dev/null -w '%{http_code}' http://localhost:3456/ || echo curl-failed",
+                timeout=30, check=False,
+            )
+            logs.append(f"jean http probe attempt {attempt}:\nrc={http.returncode}\n{http.stdout}\n{http.stderr}")
+            code = (http.stdout or "").strip()
+            if code and code != "curl-failed" and code != "000":
+                write_status(f"jean-server HTTP responding: {code}")
+                break
+            write_status(f"jean-server HTTP not ready yet (attempt {attempt}): {code}")
+            time.sleep(10)
+        else:
+            raise SmokeError(f"jean-server port 3456 not responding (last code: {code})")
+        # 3. Show first-login info from the VM
+        login = ssh_run(
+            ip, user, identity,
+            "sudo -n cat /root/jean-first-login.txt || true",
+            timeout=30, check=False,
+        )
+        logs.append(f"jean FIRST_LOGIN.txt:\n{login.stdout}")
+        write_status(f"jean first-login info:\n{login.stdout}")
     else:
         write_status("running basic probes")
         basic = ssh_run(ip, user, identity, "uname -a && uptime", timeout=60, check=False)
@@ -679,7 +727,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument("--name", default=None, help="Override server name")
     p.add_argument("--cloud-init-timeout", type=int, default=DEFAULT_CLOUD_INIT_TIMEOUT)
     p.add_argument("--ssh-timeout", type=int, default=DEFAULT_SSH_READY_TIMEOUT)
-    p.add_argument("--probe", default=None, choices=["docker", "postgres", "basic"], help="Probe profile")
+    p.add_argument("--probe", default=None, choices=["docker", "postgres", "basic", "jean"], help="Probe profile")
     p.add_argument(
         "--skip-ensure",
         action="store_true",

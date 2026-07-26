@@ -1,0 +1,16 @@
+# Contract: Jean Server on Ubuntu
+name: jean-ubuntu
+example: ai/ubuntu-jean.yaml
+image: ubuntu-24.04
+flavor: gp.medium1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: basic
+cloud_init_timeout_seconds: 300
+expect:
+  - cloud-init status succeeds
+  - port 3456 returns HTTP 200
+  - /etc/jean-server.env exists with JEAN_TOKEN set
+  - jean-server systemd service is active and running

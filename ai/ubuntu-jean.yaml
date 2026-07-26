@@ -1,0 +1,80 @@
+#cloud-config
+# Jean Server (jean.build) on Ubuntu — AI dev environment with browser-based Web Access
+#
+# Jean is a headless AI coding assistant server by CoolLabs.
+# It gives you a full browser UI for working with Claude CLI, Codex CLI, OpenCode,
+# Grok, Kimi Code, and others across multiple projects and git worktrees.
+#
+# Uses the official installer — always installs the latest release automatically.
+# Check the releases page to see what version will be installed:
+#   https://github.com/coollabsio/jean/releases
+#
+# After boot, Jean Web Access is available at:
+#   http://<server-ip>:3456/?token=<your-token>
+#
+# To retrieve your token after boot:
+#   sudo grep JEAN_TOKEN /etc/jean-server.env
+#   sudo cat /root/jean-first-login.txt
+#
+# Required security group ports:
+#   - 22   (SSH — management)
+#   - 3456 (Jean Web Access — TCP)
+#
+# Recommended specs: 2 vCPU / 4 GB RAM minimum; 4+ vCPU / 8 GB for heavier workloads.
+# Tested on: Ubuntu 24.04 LTS, Ubuntu 22.04 LTS
+
+bootcmd:
+  - |
+    for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+      [ -f "$f" ] && sed -i \
+        -e 's|https\?://archive\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://security\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://ports\.ubuntu\.com/ubuntu-ports|https://mirror.gozunga.com/ubuntu|g' \
+        "$f" || true
+    done
+
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+
+runcmd:
+  - |
+    set -e
+
+    # Install Jean Server using the official installer.
+    # Binds to all interfaces (0.0.0.0:3456) so it's reachable from your browser.
+    # A secure token is auto-generated and saved to /etc/jean-server.env
+    curl -fsSL https://raw.githubusercontent.com/coollabsio/jean/main/scripts/install-jean-server.sh \
+      | bash -s -- --host 0.0.0.0 --port 3456 -y
+
+    # Write a first-login helper with the URL and token
+    IP="$(hostname -I | awk '{print $1}')"
+    TOKEN="$(grep '^JEAN_TOKEN=' /etc/jean-server.env | cut -d= -f2-)"
+    cat > /root/jean-first-login.txt <<EOF
+    Jean Server is running on port 3456.
+
+    Open in your browser:
+      http://${IP}:3456/?token=${TOKEN}
+
+    Token (keep this secret):
+      ${TOKEN}
+
+    Token is stored at: /etc/jean-server.env
+    For security, consider placing Jean behind a reverse proxy with TLS.
+    EOF
+    chmod 0640 /root/jean-first-login.txt
+
+final_message: |
+  Jean Server is running on port 3456 after $UPTIME seconds.
+  Token and login URL: sudo cat /root/jean-first-login.txt
