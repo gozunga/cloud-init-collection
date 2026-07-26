@@ -14,7 +14,6 @@
 #
 # To retrieve your token after boot:
 #   sudo grep JEAN_TOKEN /etc/jean-server.env
-#   sudo cat /root/jean-first-login.txt
 #
 # Required security group ports:
 #   - 22   (SSH — management)
@@ -51,30 +50,12 @@ packages:
 runcmd:
   - |
     set -e
-
-    # Install Jean Server using the official installer.
-    # Binds to all interfaces (0.0.0.0:3456) so it's reachable from your browser.
-    # A secure token is auto-generated and saved to /etc/jean-server.env
+    # Install Jean Server using the official installer (always gets latest release).
+    # Binds to all interfaces (0.0.0.0:3456) — token auth is enabled by default.
+    # Your token is auto-generated and saved to /etc/jean-server.env
     curl -fsSL https://raw.githubusercontent.com/coollabsio/jean/main/scripts/install-jean-server.sh \
       | bash -s -- --host 0.0.0.0 --port 3456 -y
 
-    # Write a first-login helper with the URL and token
-    IP="$(hostname -I | awk '{print $1}')"
-    TOKEN="$(grep '^JEAN_TOKEN=' /etc/jean-server.env | cut -d= -f2-)"
-    cat > /root/jean-first-login.txt <<EOF
-    Jean Server is running on port 3456.
-
-    Open in your browser:
-      http://${IP}:3456/?token=${TOKEN}
-
-    Token (keep this secret):
-      ${TOKEN}
-
-    Token is stored at: /etc/jean-server.env
-    For security, consider placing Jean behind a reverse proxy with TLS.
-    EOF
-    chmod 0640 /root/jean-first-login.txt
-
 final_message: |
   Jean Server is running on port 3456 after $UPTIME seconds.
-  Token and login URL: sudo cat /root/jean-first-login.txt
+  Retrieve your token: sudo grep JEAN_TOKEN /etc/jean-server.env
