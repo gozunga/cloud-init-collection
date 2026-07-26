@@ -1,0 +1,82 @@
+#cloud-config
+# Hermes Agent (NousResearch) on Ubuntu
+#
+# Installs Hermes Agent via the official installer in headless/server mode.
+# Skips browser automation (no desktop required on a server).
+# After boot, run `hermes setup` to configure your LLM provider and channels.
+#
+# Hermes docs: https://hermes-agent.nousresearch.com
+# GitHub: https://github.com/NousResearch/hermes-agent
+#
+# After boot:
+#   ssh ubuntu@<server-ip>
+#   hermes setup
+#
+# Required security group ports:
+#   - 22  (SSH — management)
+#
+# Recommended specs: 2 vCPU / 4 GB RAM minimum
+# Tested on: Ubuntu 26.04 LTS
+
+bootcmd:
+  - |
+    for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+      [ -f "$f" ] && sed -i \
+        -e 's|https\?://archive\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://security\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://ports\.ubuntu\.com/ubuntu-ports|https://mirror.gozunga.com/ubuntu|g' \
+        "$f" || true
+    done
+
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+  - git
+  - xz-utils
+  - build-essential
+
+runcmd:
+  - |
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Install Hermes Agent via official installer, skip browser automation
+    curl -fsSL https://hermes-agent.nousresearch.com/install.sh \
+      | bash -s -- --skip-browser
+
+    # Make hermes available system-wide
+    ln -sf /usr/local/lib/hermes-agent/venv/bin/hermes /usr/local/bin/hermes 2>/dev/null || \
+    ln -sf /root/.local/bin/hermes /usr/local/bin/hermes 2>/dev/null || \
+    ln -sf /root/.hermes/hermes-agent/venv/bin/hermes /usr/local/bin/hermes 2>/dev/null || true
+
+    cat >> /etc/motd <<'EOF'
+
+    ╔══════════════════════════════════════════════════════╗
+    ║          Hermes Agent installed successfully         ║
+    ╠══════════════════════════════════════════════════════╣
+    ║  To configure your LLM provider:                     ║
+    ║    hermes setup                                      ║
+    ║                                                      ║
+    ║  Or quick setup with Nous Portal:                    ║
+    ║    hermes setup --portal                             ║
+    ║                                                      ║
+    ║  Verify installation:                                ║
+    ║    hermes doctor                                     ║
+    ╚══════════════════════════════════════════════════════╝
+
+    EOF
+
+final_message: |
+  Hermes Agent installed after $UPTIME seconds.
+  Run `hermes setup` to configure your LLM provider.

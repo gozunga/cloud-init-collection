@@ -1,0 +1,14 @@
+# Contract: Hermes Agent on Ubuntu
+name: hermes-ubuntu
+example: ai/ubuntu-hermes.yaml
+image: ubuntu-26.04
+flavor: gp.medium1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: hermes
+cloud_init_timeout_seconds: 900
+expect:
+  - cloud-init status succeeds
+  - hermes binary is installed and accessible

@@ -1,0 +1,14 @@
+# Contract: OpenClaw on Ubuntu
+name: openclaw-ubuntu
+example: ai/ubuntu-openclaw.yaml
+image: ubuntu-26.04
+flavor: gp.small1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: openclaw
+cloud_init_timeout_seconds: 600
+expect:
+  - cloud-init status succeeds
+  - openclaw binary is installed and returns version

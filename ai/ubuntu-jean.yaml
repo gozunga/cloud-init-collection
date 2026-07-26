@@ -21,7 +21,7 @@
 #   - 3456 (Jean Web Access — TCP)
 #
 # Recommended specs: 2 vCPU / 4 GB RAM minimum; 4+ vCPU / 8 GB for heavier workloads.
-# Tested on: Ubuntu 24.04 LTS, Ubuntu 22.04 LTS
+# Tested on: Ubuntu 26.04 LTS
 
 bootcmd:
   - |

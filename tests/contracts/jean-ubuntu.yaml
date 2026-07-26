@@ -1,7 +1,7 @@
 # Contract: Jean Server on Ubuntu
 name: jean-ubuntu
 example: ai/ubuntu-jean.yaml
-image: ubuntu-24.04
+image: ubuntu-26.04
 flavor: gp.medium1
 network: Internet
 keypair: openclaw-chester

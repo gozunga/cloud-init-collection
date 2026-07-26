@@ -1,0 +1,78 @@
+#cloud-config
+# OpenClaw AI assistant gateway on Ubuntu
+#
+# Installs Node.js 24 and OpenClaw via the official installer.
+# After boot, run `openclaw onboard` to configure API keys and channels.
+#
+# OpenClaw docs: https://docs.openclaw.ai
+#
+# After boot:
+#   ssh ubuntu@<server-ip>
+#   sudo -i -u openclaw
+#   openclaw onboard
+#
+# Required security group ports:
+#   - 22  (SSH — management)
+#
+# Recommended specs: 2 vCPU / 2 GB RAM minimum
+# Tested on: Ubuntu 26.04 LTS
+
+bootcmd:
+  - |
+    for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+      [ -f "$f" ] && sed -i \
+        -e 's|https\?://archive\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://security\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://ports\.ubuntu\.com/ubuntu-ports|https://mirror.gozunga.com/ubuntu|g' \
+        "$f" || true
+    done
+
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+  - git
+
+runcmd:
+  - |
+    set -e
+    export HOME=/root
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Install OpenClaw via official installer
+    # (handles Node.js 24 installation automatically)
+    curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh \
+      | bash -s -- --no-onboard
+
+    # Print next-step instructions
+    cat > /etc/motd.openclaw <<'EOF'
+
+    ╔══════════════════════════════════════════════════════╗
+    ║            OpenClaw installed successfully           ║
+    ╠══════════════════════════════════════════════════════╣
+    ║  To finish setup, run:                               ║
+    ║    openclaw onboard                                  ║
+    ║                                                      ║
+    ║  Check status:                                       ║
+    ║    openclaw status                                   ║
+    ║    sudo systemctl status openclaw                    ║
+    ║                                                      ║
+    ║  Docs: https://docs.openclaw.ai                      ║
+    ╚══════════════════════════════════════════════════════╝
+
+    EOF
+    cat /etc/motd.openclaw >> /etc/motd
+
+final_message: |
+  OpenClaw installed after $UPTIME seconds.
+  Run `openclaw onboard` to configure API keys and channels.

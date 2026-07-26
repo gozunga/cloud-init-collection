@@ -1,0 +1,17 @@
+# Contract: Ollama + Open WebUI on Ubuntu with NVIDIA GPU
+name: ollama-ubuntu
+example: ai/ubuntu-ollama-openwebui.yaml
+image: ubuntu-26.04
+flavor: ac.nvrtx2000pro1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: ubuntu
+probe: ollama
+cloud_init_timeout_seconds: 900
+expect:
+  - cloud-init status succeeds (including post-driver reboot)
+  - nvidia-smi detects GPU
+  - docker service is active
+  - ollama container is running and API responds on port 11434
+  - open-webui container is running and responds on port 3000

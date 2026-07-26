@@ -1,0 +1,14 @@
+# Contract: Hermes Agent on Rocky Linux
+name: hermes-rocky
+example: ai/rocky-hermes.yaml
+image: rocky-10
+flavor: gp.medium1
+network: Internet
+keypair: openclaw-chester
+security_group: cloudinit-smoke
+ssh_user: rocky
+probe: hermes
+cloud_init_timeout_seconds: 900
+expect:
+  - cloud-init status succeeds
+  - hermes binary is installed and accessible

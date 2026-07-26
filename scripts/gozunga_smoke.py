@@ -633,6 +633,90 @@ def run_probes(profile: str, ip: str, user: str, identity: str, cloud_init_timeo
         if role.returncode != 0 or "app" not in (role.stdout or ""):
             raise SmokeError("app role not found")
         write_status("app role verified")
+    elif profile == "openclaw":
+        write_status("running openclaw probe")
+        for attempt in range(1, 13):
+            ver = ssh_run(ip, user, identity,
+                "openclaw --version 2>/dev/null || /usr/local/bin/openclaw --version 2>/dev/null || "
+                "$(npm prefix -g)/bin/openclaw --version 2>/dev/null || echo NOT_FOUND",
+                timeout=30, check=False)
+            logs.append(f"openclaw version attempt {attempt}:\nrc={ver.returncode}\n{ver.stdout}\n{ver.stderr}")
+            out = (ver.stdout or "").strip()
+            if out and "NOT_FOUND" not in out:
+                write_status(f"openclaw installed: {out.splitlines()[0]}")
+                break
+            write_status(f"openclaw not found yet (attempt {attempt})")
+            time.sleep(10)
+        else:
+            raise SmokeError("openclaw binary not found after cloud-init")
+
+    elif profile == "hermes":
+        write_status("running hermes probe")
+        for attempt in range(1, 13):
+            ver = ssh_run(ip, user, identity,
+                "hermes --version 2>/dev/null || /usr/local/bin/hermes --version 2>/dev/null || "
+                "/root/.local/bin/hermes --version 2>/dev/null || "
+                "/usr/local/lib/hermes-agent/venv/bin/hermes --version 2>/dev/null || echo NOT_FOUND",
+                timeout=30, check=False)
+            logs.append(f"hermes version attempt {attempt}:\nrc={ver.returncode}\n{ver.stdout}\n{ver.stderr}")
+            out = (ver.stdout or "").strip()
+            if out and "NOT_FOUND" not in out:
+                write_status(f"hermes installed: {out.splitlines()[0]}")
+                break
+            write_status(f"hermes not found yet (attempt {attempt})")
+            time.sleep(10)
+        else:
+            raise SmokeError("hermes binary not found after cloud-init")
+
+    elif profile == "ollama":
+        write_status("running ollama+openwebui probes")
+        # 1. nvidia-smi
+        for attempt in range(1, 7):
+            smi = ssh_run(ip, user, identity, "nvidia-smi --query-gpu=name --format=csv,noheader",
+                timeout=30, check=False)
+            logs.append(f"nvidia-smi attempt {attempt}:\nrc={smi.returncode}\n{smi.stdout}\n{smi.stderr}")
+            if smi.returncode == 0 and (smi.stdout or "").strip():
+                write_status(f"GPU detected: {(smi.stdout or '').strip()}")
+                break
+            write_status(f"nvidia-smi not ready (attempt {attempt})")
+            time.sleep(10)
+        else:
+            raise SmokeError("nvidia-smi failed — GPU/driver issue")
+        # 2. docker running
+        docker_ok = ssh_run(ip, user, identity, "sudo -n systemctl is-active docker",
+            timeout=30, check=False)
+        logs.append(f"docker active:\nrc={docker_ok.returncode}\n{docker_ok.stdout}")
+        if docker_ok.returncode != 0:
+            raise SmokeError("docker service not active after reboot")
+        # 3. Ollama API on :11434 (wait for image pull + startup)
+        for attempt in range(1, 31):
+            ollama = ssh_run(ip, user, identity,
+                "curl -s -o /dev/null -w '%{http_code}' http://localhost:11434/api/tags || echo curl-failed",
+                timeout=30, check=False)
+            logs.append(f"ollama http attempt {attempt}:\n{ollama.stdout}")
+            code = (ollama.stdout or "").strip()
+            if code and code not in ("curl-failed", "000"):
+                write_status(f"Ollama API responding: {code}")
+                break
+            write_status(f"Ollama not ready yet (attempt {attempt}/30) — image may still be pulling")
+            time.sleep(15)
+        else:
+            raise SmokeError("Ollama API never responded on port 11434")
+        # 4. OpenWebUI on :3000
+        for attempt in range(1, 13):
+            webui = ssh_run(ip, user, identity,
+                "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || echo curl-failed",
+                timeout=30, check=False)
+            logs.append(f"openwebui http attempt {attempt}:\n{webui.stdout}")
+            code = (webui.stdout or "").strip()
+            if code and code not in ("curl-failed", "000"):
+                write_status(f"Open WebUI responding: {code}")
+                break
+            write_status(f"Open WebUI not ready yet (attempt {attempt})")
+            time.sleep(15)
+        else:
+            raise SmokeError("Open WebUI never responded on port 3000")
+
     elif profile == "jean":
         write_status("running jean-server probes")
         # 1. systemd service must be active
@@ -727,7 +811,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument("--name", default=None, help="Override server name")
     p.add_argument("--cloud-init-timeout", type=int, default=DEFAULT_CLOUD_INIT_TIMEOUT)
     p.add_argument("--ssh-timeout", type=int, default=DEFAULT_SSH_READY_TIMEOUT)
-    p.add_argument("--probe", default=None, choices=["docker", "postgres", "basic", "jean"], help="Probe profile")
+    p.add_argument("--probe", default=None, choices=["docker", "postgres", "basic", "jean", "openclaw", "hermes", "ollama"], help="Probe profile")
     p.add_argument(
         "--skip-ensure",
         action="store_true",
