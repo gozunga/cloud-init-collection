@@ -45,6 +45,7 @@ These configs target GPU instances (`ac.nvl40s1` or larger). NVIDIA drivers are 
 | File | Purpose | GPU VRAM | Ports |
 |------|---------|----------|-------|
 | [`ai/ubuntu-vllm-openwebui.yaml`](./ai/ubuntu-vllm-openwebui.yaml) | [vLLM](https://vllm.ai) serving **Qwen3.6-27B-FP8** + [Open WebUI](https://openwebui.com) | 40 GB+ (L40S) | `8000` (vLLM API), `3000` (WebUI) |
+| [`ai/ubuntu-llamaserver-openwebui.yaml`](./ai/ubuntu-llamaserver-openwebui.yaml) | [llama-server](https://github.com/ggml-org/llama.cpp) (llama.cpp) serving **Qwen3.6-27B-Q5_K_M** GGUF + [Open WebUI](https://openwebui.com) | 40 GB+ (L40S) | `8080` (API), `3000` (WebUI) |
 | [`ai/ubuntu-ollama-openwebui.yaml`](./ai/ubuntu-ollama-openwebui.yaml) | [Ollama](https://ollama.com) + [Open WebUI](https://openwebui.com) — pull any model after boot | 40 GB+ | `11434` (Ollama API), `3000` (WebUI) |
 
 The vLLM config uses `--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 --mm-encoder-tp-mode data`. Open WebUI connects to vLLM as an OpenAI-compatible backend and appears at `:3000` once vLLM passes its healthcheck.

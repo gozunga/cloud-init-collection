@@ -1,0 +1,213 @@
+#cloud-config
+# llama-server (llama.cpp) + Open WebUI on Ubuntu with NVIDIA GPU support
+#
+# Installs NVIDIA open-kernel drivers, NVIDIA Container Toolkit, Docker CE,
+# and brings up llama-server + Open WebUI via Docker Compose.
+#
+# llama-server serves an OpenAI-compatible API on port 8080; Open WebUI connects
+# to it as its backend and is available on port 3000.
+#
+# Default model: Qwen3.6-27B-Q5_K_M GGUF (~18 GB VRAM) via bartowski on HuggingFace.
+# Q5_K_M offers near-lossless quality at roughly half the VRAM of FP8/BF16 weights,
+# leaving plenty of headroom for KV cache on a 48 GB L40S.
+# For a higher-quality quant, swap to Q8_0 (sharded, ~29 GB) — see comments below.
+# Requires a 40+ GB GPU — recommended: ac.nvl40s1 (48 GB L40S) or larger.
+# To use a different model, edit the `command` block in /opt/llama/docker-compose.yml.
+#
+# Note: first startup downloads the model (~18 GB) — allow 5-10 minutes.
+# Unlike vLLM, llama-server has no CUDA graph compile phase; it is ready faster.
+#
+# After boot (including driver reboot):
+#   Open WebUI: http://<server-ip>:3000
+#   llama-server API: http://<server-ip>:8080/v1  (OpenAI-compatible)
+#
+# Required security group ports:
+#   - 22   (SSH — management)
+#   - 3000 (Open WebUI)
+#   - 8080 (llama-server API — optional, for direct API access)
+#
+# Recommended: ac.nvl40s1 (48 GB L40S) or ac.nvl40s2 (2x L40S)
+# Tested on: Ubuntu 26.04 LTS
+
+bootcmd:
+  - |
+    for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+      [ -f "$f" ] && sed -i \
+        -e 's|https\?://archive\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://security\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://ports\.ubuntu\.com/ubuntu-ports|https://mirror.gozunga.com/ubuntu|g' \
+        "$f" || true
+    done
+
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - ca-certificates
+
+write_files:
+  - path: /etc/modprobe.d/blacklist-nouveau.conf
+    permissions: '0644'
+    content: |
+      blacklist nouveau
+      blacklist lbm-nouveau
+      options nouveau modeset=0
+      alias nouveau off
+      alias lbm-nouveau off
+
+  - path: /opt/llama/.env
+    permissions: '0600'
+    content: |
+      # Uncomment and set your HuggingFace token for gated models (Llama, Mistral, etc.)
+      # HF_TOKEN=hf_you…here
+
+  - path: /opt/llama/docker-compose.yml
+    permissions: '0644'
+    content: |
+      services:
+        llama-server:
+          image: ghcr.io/ggml-org/llama.cpp:server-cuda13
+          container_name: llama-server
+          restart: unless-stopped
+          ports:
+            - "8080:8080"
+          volumes:
+            - huggingface:/root/.cache/huggingface
+          env_file: .env
+          # Default: Qwen3.6-27B-Q5_K_M (~18 GB) — fits a single L40S with KV cache headroom.
+          # For Q8_0 (sharded, ~29 GB), replace --hf-file with:
+          #   --hf-repo bartowski/Qwen_Qwen3.6-27B-GGUF --hf-file Qwen_Qwen3.6-27B-Q8_0/Qwen_Qwen3.6-27B-Q8_0-00001-of-00002.gguf
+          # (llama.cpp auto-discovers sibling shards from the first shard file)
+          command:
+            - "--hf-repo"
+            - "bartowski/Qwen_Qwen3.6-27B-GGUF"
+            - "--hf-file"
+            - "Qwen_Qwen3.6-27B-Q5_K_M.gguf"
+            - "--ngl"
+            - "99"
+            - "--ctx-size"
+            - "131072"
+            - "--parallel"
+            - "8"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+          deploy:
+            resources:
+              reservations:
+                devices:
+                  - driver: nvidia
+                    count: all
+                    capabilities: [gpu]
+          ipc: host
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 20
+            start_period: 600s
+
+        open-webui:
+          image: ghcr.io/open-webui/open-webui:main
+          container_name: open-webui
+          restart: unless-stopped
+          ports:
+            - "3000:8080"
+          volumes:
+            - open-webui:/app/backend/data
+          environment:
+            - OPENAI_API_BASE_URL=http://llama-server:8080/v1
+            - OPENAI_API_KEY=***
+            - ENABLE_OLLAMA_API=false
+          depends_on:
+            llama-server:
+              condition: service_healthy
+
+      volumes:
+        huggingface:
+        open-webui:
+
+  - path: /etc/systemd/system/llama-webui.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=llama-server + Open WebUI (Docker Compose)
+      Documentation=https://github.com/ggml-org/llama.cpp https://openwebui.com
+      After=docker.service network-online.target
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/llama
+      ExecStart=/usr/bin/docker compose up -d
+      ExecStop=/usr/bin/docker compose down
+      TimeoutStartSec=600
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - update-initramfs -u
+  - add-apt-repository ppa:graphics-drivers/ppa -y
+  - apt-get update -y
+  - apt-get install -y nvidia-driver-595-server-open nvtop
+
+  # Docker CE — official repository
+  - |
+    set -e
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    . /etc/os-release
+    cat > /etc/apt/sources.list.d/docker.sources <<SRC
+    Types: deb
+    URIs: https://download.docker.com/linux/ubuntu
+    Suites: ${UBUNTU_CODENAME:-$VERSION_CODENAME}
+    Components: stable
+    Architectures: $(dpkg --print-architecture)
+    Signed-By: /etc/apt/keyrings/docker.asc
+    SRC
+    sed -i 's/^[[:space:]]\+//' /etc/apt/sources.list.d/docker.sources
+    apt-get update -y
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    systemctl enable docker
+
+  # NVIDIA Container Toolkit — for GPU passthrough into Docker
+  - |
+    set -e
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+      | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+      | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+      | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    apt-get update -y
+    apt-get install -y nvidia-container-toolkit
+    nvidia-ctk runtime configure --runtime=docker
+
+  # Enable Compose service — starts automatically after reboot
+  - systemctl daemon-reload
+  - systemctl enable llama-webui
+
+power_state:
+  mode: reboot
+  message: "Rebooting to load NVIDIA drivers — llama-server + Open WebUI will start on next boot"
+  timeout: 1
+
+final_message: |
+  NVIDIA drivers installed. Rebooting to load kernel module.
+  After reboot, llama-server will start and download the model (allow several minutes).
+  Open WebUI: http://<server-ip>:3000
+  llama-server API: http://<server-ip>:8080/v1
