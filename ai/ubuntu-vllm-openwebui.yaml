@@ -7,15 +7,16 @@
 # vLLM serves an OpenAI-compatible API on port 8000; Open WebUI connects to it
 # as its backend and is available on port 3000.
 #
-# Default model: Qwen/Qwen2.5-7B-Instruct-AWQ (AWQ quantized, ~5 GB VRAM)
-# Fits comfortably on a 16 GB GPU (e.g. ac.nvrtx2000pro1).
-# For full-precision 7B+ models, use a 24 GB+ GPU (e.g. ac.nvl40s1).
+# Default model: Qwen/Qwen3.6-27B-FP8 (~27 GB VRAM)
+# Requires a 40+ GB GPU — recommended: ac.nvl40s1 (48 GB L40S) or larger.
+# Full 262K context window on a single GPU.
+# For smaller GPUs (16 GB), swap to an AWQ/GPTQ quantized 7B model.
 # To use a different model, edit the `command` block in /opt/vllm/docker-compose.yml.
 # For gated models (Llama, Mistral, etc.), uncomment HF_TOKEN
 # in /opt/vllm/.env and add your token before starting the service.
 #
-# Note: first startup downloads the model from HuggingFace and captures CUDA graphs.
-# Allow 3-5 minutes for vLLM to become ready before Open WebUI will show models.
+# Note: first startup downloads the model (~27 GB) and captures CUDA graphs.
+# Allow 5-10 minutes for vLLM to become ready before Open WebUI will show models.
 #
 # After boot (including driver reboot):
 #   Open WebUI: http://<server-ip>:3000
@@ -26,7 +27,7 @@
 #   - 3000 (Open WebUI)
 #   - 8000 (vLLM API — optional, for direct API access)
 #
-# Recommended: GPU-flavored instance (e.g. ac.nvrtx2000pro1 or larger)
+# Recommended: ac.nvl40s1 (48 GB L40S) or ac.nvl40s2 (2x L40S)
 # Tested on: Ubuntu 26.04 LTS
 
 bootcmd:
@@ -84,12 +85,17 @@ write_files:
             - huggingface:/root/.cache/huggingface
           env_file: .env
           # Change --model to any HuggingFace model ID.
-          # AWQ/GPTQ quantized models (~5 GB) fit on 16 GB GPUs.
-          # Full-precision 7B models (~15 GB) need 24 GB+ GPUs.
-          # Add --tensor-parallel-size <n> to split across multiple GPUs.
+          # Qwen3.6-27B-FP8 (~27 GB) fits on a single 40+ GB GPU (L40S, H100, H200).
+          # For 2x L40S, add: --tensor-parallel-size 2
+          # For smaller GPUs (16 GB), use an AWQ/GPTQ quantized 7B model instead.
           command:
             - "--model"
-            - "Qwen/Qwen2.5-7B-Instruct-AWQ"
+            - "Qwen/Qwen3.6-27B-FP8"
+            - "--max-model-len"
+            - "262144"
+            - "--reasoning-parser"
+            - "qwen3"
+            - "--enable-prefix-caching"
             - "--gpu-memory-utilization"
             - "0.90"
           deploy:
