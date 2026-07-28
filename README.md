@@ -7,19 +7,19 @@ Paste any YAML into **Cloud configuration** when launching an instance.
 ## Layout
 
 ```
-coolify/        # PaaS installers
-gpu/            # NVIDIA / GPU driver setup
 ai/             # LLM inference stacks + AI dev tools (GPU)
-docker/         # Docker Engine (official repos)
 apps/           # Language/runtime app starters
-desktop/        # Linux desktop environments + xrdp
-proxy/          # Caddy / Nginx reverse proxies
-databases/      # Postgres / Redis single-node
 ci/             # GitLab Runner / GitHub Actions runner
-networking/     # WireGuard / Tailscale
+coolify/        # PaaS installers
+databases/      # Postgres / Redis single-node
+desktop/        # Linux desktop environments + xrdp
+docker/         # Docker Engine (official repos)
+gpu/            # NVIDIA / GPU driver setup
 k8s/            # k3s single-node
-security/       # HashiCorp Vault bootstrap
+networking/     # WireGuard / Tailscale
 observability/  # Netdata / Prometheus+Grafana
+proxy/          # Caddy / Nginx reverse proxies
+security/       # HashiCorp Vault bootstrap
 ```
 
 ## Coolify
