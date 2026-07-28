@@ -9,6 +9,7 @@ Paste any YAML into **Cloud configuration** when launching an instance.
 ```
 coolify/        # PaaS installers
 gpu/            # NVIDIA / GPU driver setup
+ai/             # LLM inference stacks + AI dev tools (GPU)
 docker/         # Docker Engine (official repos)
 apps/           # Language/runtime app starters
 desktop/        # Linux desktop environments + xrdp
@@ -34,6 +35,31 @@ Ports: `8000` (mgmt), optional `6001`/`6002`, plus `80`/`443` for apps.
 | File | Purpose |
 |------|---------|
 | [`gpu/ubuntu26-nvidia-open-drivers.yaml`](./gpu/ubuntu26-nvidia-open-drivers.yaml) | Ubuntu 26 + open NVIDIA driver stack + reboot |
+
+## AI / LLM inference
+
+These configs target GPU instances (`ac.nvl40s1` or larger). NVIDIA drivers are installed and the instance reboots once before the AI stack starts.
+
+### Inference servers
+
+| File | Purpose | GPU VRAM | Ports |
+|------|---------|----------|-------|
+| [`ai/ubuntu-vllm-openwebui.yaml`](./ai/ubuntu-vllm-openwebui.yaml) | [vLLM](https://vllm.ai) serving **Qwen3.6-27B-FP8** + [Open WebUI](https://openwebui.com) | 40 GB+ (L40S) | `8000` (vLLM API), `3000` (WebUI) |
+| [`ai/ubuntu-ollama-openwebui.yaml`](./ai/ubuntu-ollama-openwebui.yaml) | [Ollama](https://ollama.com) + [Open WebUI](https://openwebui.com) — pull any model after boot | 40 GB+ | `11434` (Ollama API), `3000` (WebUI) |
+
+The vLLM config uses `--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 --mm-encoder-tp-mode data`. Open WebUI connects to vLLM as an OpenAI-compatible backend and appears at `:3000` once vLLM passes its healthcheck.
+
+### AI dev tools
+
+| File | Purpose | Ports |
+|------|---------|-------|
+| [`ai/ubuntu-jean.yaml`](./ai/ubuntu-jean.yaml) | [Jean](https://jean.build) — browser-based AI coding environment (CoolLabs) | `8080` (Web UI) |
+| [`ai/ubuntu-openclaw.yaml`](./ai/ubuntu-openclaw.yaml) | [OpenClaw](https://openclaw.ai) AI assistant gateway on Ubuntu | `3747` (gateway) |
+| [`ai/rocky-openclaw.yaml`](./ai/rocky-openclaw.yaml) | OpenClaw on Rocky / Alma / RHEL-style | `3747` (gateway) |
+| [`ai/ubuntu-hermes.yaml`](./ai/ubuntu-hermes.yaml) | [Hermes Agent](https://nousresearch.com) — headless server mode on Ubuntu | — |
+| [`ai/rocky-hermes.yaml`](./ai/rocky-hermes.yaml) | Hermes Agent on Rocky / Alma / RHEL-style | — |
+
+Notes: first boot for vLLM and Ollama stacks takes **5–15 minutes** — NVIDIA drivers install, the instance reboots, then the model downloads and CUDA graphs compile. Check `cloud-init status` and watch `:8000/health` before expecting Open WebUI to show models.
 
 ## Docker Engine (official repos)
 
