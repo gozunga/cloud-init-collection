@@ -1,0 +1,55 @@
+#cloud-config
+# Ubuntu: Containerlab host for routing and network scenarios.
+# Installs Docker, Containerlab, enables forwarding, and pre-pulls FRRouting.
+# Use with Ubuntu 26.04 and a gp.small1 (or larger) Gozunga Cloud instance.
+# Docs: https://containerlab.dev/
+
+bootcmd:
+  - |
+    for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+      [ -f "$f" ] && sed -i \
+        -e 's|https\?://archive\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://security\.ubuntu\.com/ubuntu|https://mirror.gozunga.com/ubuntu|g' \
+        -e 's|https\?://ports\.ubuntu\.com/ubuntu-ports|https://mirror.gozunga.com/ubuntu|g' \
+        "$f" || true
+    done
+
+apt:
+  primary:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+  security:
+    - arches: [default]
+      uri: https://mirror.gozunga.com/ubuntu
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - docker.io
+  - iproute2
+
+write_files:
+  - path: /etc/sysctl.d/99-containerlab-routing.conf
+    permissions: '0644'
+    content: |
+      # Enables controlled forwarding between lab namespaces and test networks.
+      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+
+runcmd:
+  - sysctl --system
+  - systemctl enable --now docker
+  - |
+    for u in ubuntu debian; do
+      if id "$u" >/dev/null 2>&1; then usermod -aG docker "$u"; fi
+    done
+  - curl -fsSL https://get.containerlab.dev | bash
+  - install -d -o ubuntu -g ubuntu /opt/netlabs
+  - docker pull quay.io/frrouting/frr:10.2.1
+
+final_message: >-
+  Containerlab routing-lab host is ready after $UPTIME seconds. Log in again
+  to pick up Docker group membership, then use /opt/netlabs for topology files.
