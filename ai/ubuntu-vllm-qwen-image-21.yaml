@@ -6,7 +6,9 @@
 # and brings up vLLM-Omni via Docker Compose.
 #
 # vLLM-Omni pulls one Hugging Face repository and serves an OpenAI-compatible
-# image API on port 8000. A small web page on port 3000 sends prompts to that API.
+# image API on port 8000. The page on port 3000 creates images and can attach
+# up to four reference images. Edits use POST /v1/images/edits as a file upload.
+# https://recipes.vllm.ai/Qwen/Qwen-Image-2.1
 #
 # Model: Qwen/Qwen-Image-2.1
 # https://huggingface.co/Qwen/Qwen-Image-2.1
@@ -145,6 +147,7 @@ write_files:
           listen 3000;
           server_name _;
           root /usr/share/nginx/html;
+          client_max_body_size 32m;
 
           location / {
               try_files $uri /index.html;
@@ -173,88 +176,363 @@ write_files:
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Qwen-Image-2.1</title>
         <style>
-          body { font-family: sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
-          label { display: block; margin-top: 1rem; }
-          textarea, select, input, button { font: inherit; }
-          textarea { width: 100%; min-height: 8rem; }
-          button { margin-top: 1rem; padding: 0.4rem 1rem; }
-          img { max-width: 100%; margin-top: 1rem; }
-          #status, #health { margin-top: 1rem; }
+          :root {
+            color-scheme: dark;
+            --bg: #12110f;
+            --panel: #1b1916;
+            --ink: #f4efe6;
+            --muted: #b7ab9b;
+            --line: #3a342c;
+            --accent: #e2a15a;
+            --accent-ink: #1c1308;
+          }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: "Segoe UI", sans-serif;
+          }
+          header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: center;
+            padding: 1rem 1.4rem;
+            border-bottom: 1px solid var(--line);
+          }
+          h1 { font-size: 1.15rem; margin: 0; font-weight: 650; }
+          header p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.92rem; }
+          main {
+            display: grid;
+            grid-template-columns: minmax(20rem, 28rem) 1fr;
+            min-height: calc(100vh - 4.6rem);
+          }
+          .controls, .stage { padding: 1.2rem 1.4rem 2rem; }
+          .stage { background: #0e0d0c; display: flex; flex-direction: column; gap: 0.8rem; }
+          label { display: block; margin-top: 0.9rem; font-size: 0.92rem; }
+          textarea, select, input {
+            width: 100%;
+            margin-top: 0.35rem;
+            padding: 0.6rem 0.7rem;
+            color: inherit;
+            background: #241f1b;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            font: inherit;
+          }
+          textarea { min-height: 8rem; resize: vertical; }
+          .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+          button, .file-btn {
+            font: inherit;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+          }
+          button.primary {
+            width: 100%;
+            margin-top: 1rem;
+            padding: 0.7rem 1rem;
+            background: var(--accent);
+            color: var(--accent-ink);
+            font-weight: 700;
+          }
+          button.primary:disabled { opacity: 0.55; cursor: wait; }
+          button.ghost, .file-btn {
+            background: transparent;
+            color: var(--ink);
+            border: 1px solid var(--line);
+            padding: 0.45rem 0.7rem;
+          }
+          .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+          .drop {
+            margin-top: 0.4rem;
+            padding: 1rem;
+            text-align: center;
+            border: 1px dashed #6a5d4e;
+            border-radius: 10px;
+            color: var(--muted);
+          }
+          .drop.over { border-color: var(--accent); color: var(--ink); }
+          .refs, .history { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+          .thumb { position: relative; width: 76px; height: 76px; }
+          .thumb img, .history button img {
+            width: 76px;
+            height: 76px;
+            object-fit: cover;
+            border-radius: 8px;
+            display: block;
+          }
+          .thumb button {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 1.3rem;
+            height: 1.3rem;
+            border-radius: 99px;
+            background: #111;
+            color: white;
+          }
+          .history button { padding: 0; background: transparent; }
+          .canvas {
+            min-height: 24rem;
+            display: grid;
+            place-items: center;
+            border-radius: 12px;
+            background-color: #171512;
+            background-image:
+              linear-gradient(45deg, #221f1b 25%, transparent 25%),
+              linear-gradient(-45deg, #221f1b 25%, transparent 25%),
+              linear-gradient(45deg, transparent 75%, #221f1b 75%),
+              linear-gradient(-45deg, transparent 75%, #221f1b 75%);
+            background-size: 28px 28px;
+            background-position: 0 0, 0 14px, 14px -14px, -14px 0;
+          }
+          #result { max-width: 100%; max-height: 72vh; }
+          #status { min-height: 1.4rem; color: var(--muted); }
+          details { margin-top: 0.8rem; color: var(--muted); }
+          @media (max-width: 860px) {
+            main { grid-template-columns: 1fr; }
+            header { align-items: flex-start; flex-direction: column; }
+          }
         </style>
       </head>
       <body>
-        <h1>Qwen-Image-2.1</h1>
-        <p id="health">Checking the model.</p>
-        <form id="form">
-          <label>Prompt
-            <textarea id="prompt" required>A ceramic teapot on a wooden table</textarea>
-          </label>
-          <label>Size
-            <select id="size">
-              <option value="1024x1024">1024 x 1024</option>
-              <option value="1280x720">1280 x 720</option>
-              <option value="720x1280">720 x 1280</option>
-            </select>
-          </label>
-          <label>Steps
-            <input id="steps" type="number" min="1" max="80" value="40">
-          </label>
-          <label>Seed (optional)
-            <input id="seed" type="number" min="0">
-          </label>
-          <button type="submit">Generate</button>
-        </form>
-        <p id="status"></p>
-        <img id="result" alt="">
+        <header>
+          <div>
+            <h1>Qwen-Image-2.1</h1>
+            <p id="health">Checking the model.</p>
+          </div>
+          <div class="actions">
+            <button class="ghost" id="use-result" type="button" disabled>Use result as reference</button>
+            <button class="ghost" id="download" type="button" disabled>Download</button>
+          </div>
+        </header>
+        <main>
+          <form class="controls" id="form">
+            <label>Prompt
+              <textarea id="prompt" required>A ceramic teapot on a wooden table</textarea>
+            </label>
+            <label>Reference images
+              <div class="drop" id="drop">Drop up to 4 images here, or choose files. Leave this empty to create a new image.</div>
+              <input id="files" type="file" accept="image/*" multiple hidden>
+              <button class="file-btn" id="pick" type="button">Choose images</button>
+              <div class="refs" id="refs"></div>
+            </label>
+            <div class="row">
+              <label>Size
+                <select id="size">
+                  <option value="1024x1024">1024 x 1024</option>
+                  <option value="1280x720">1280 x 720</option>
+                  <option value="720x1280">720 x 1280</option>
+                  <option value="1536x1024">1536 x 1024</option>
+                  <option value="1024x1536">1024 x 1536</option>
+                  <option value="2048x2048">2048 x 2048</option>
+                </select>
+              </label>
+              <label>Steps
+                <input id="steps" type="number" min="1" max="80" value="40">
+              </label>
+            </div>
+            <details>
+              <summary>More settings</summary>
+              <label>Negative prompt
+                <textarea id="negative" placeholder="Optional. Used only when you want the model to avoid something."></textarea>
+              </label>
+              <label>Seed
+                <input id="seed" type="number" min="0" placeholder="Leave empty for a new result each time">
+              </label>
+            </details>
+            <button class="primary" id="go" type="submit">Generate</button>
+            <p id="status"></p>
+            <div class="history" id="history"></div>
+          </form>
+          <section class="stage">
+            <div class="canvas"><img id="result" alt=""></div>
+          </section>
+        </main>
         <script>
           const health = document.querySelector("#health");
           const statusEl = document.querySelector("#status");
-          const img = document.querySelector("#result");
+          const result = document.querySelector("#result");
+          const refsEl = document.querySelector("#refs");
+          const historyEl = document.querySelector("#history");
+          const go = document.querySelector("#go");
+          const downloadBtn = document.querySelector("#download");
+          const useResultBtn = document.querySelector("#use-result");
+          const refs = [];
+          let currentUrl = "";
 
-          async function checkHealth() {
-            try {
-              const response = await fetch("/health");
-              health.textContent = response.ok ? "The model is ready." : "The model is still loading. Wait, then try again.";
-            } catch (error) {
+          function checkHealth() {
+            fetch("/health").then(function (response) {
+              health.textContent = response.ok
+                ? "The model is ready."
+                : "The model is still loading. Wait, then try again.";
+            }).catch(function () {
               health.textContent = "The model is still loading. Wait, then try again.";
-            }
+            });
           }
-
           checkHealth();
           setInterval(checkHealth, 10000);
 
-          document.querySelector("#form").addEventListener("submit", async (event) => {
+          function renderRefs() {
+            refsEl.replaceChildren();
+            refs.forEach(function (item, index) {
+              const wrap = document.createElement("div");
+              wrap.className = "thumb";
+              const image = document.createElement("img");
+              image.src = item.url;
+              image.alt = "Reference " + (index + 1);
+              const remove = document.createElement("button");
+              remove.type = "button";
+              remove.textContent = "x";
+              remove.addEventListener("click", function () {
+                URL.revokeObjectURL(item.url);
+                refs.splice(index, 1);
+                renderRefs();
+              });
+              wrap.append(image, remove);
+              refsEl.append(wrap);
+            });
+          }
+
+          function addFiles(fileList) {
+            Array.from(fileList).forEach(function (file) {
+              if (!file.type.startsWith("image/") || refs.length >= 4) return;
+              refs.push({ file: file, url: URL.createObjectURL(file) });
+            });
+            renderRefs();
+          }
+
+          document.querySelector("#pick").addEventListener("click", function () {
+            document.querySelector("#files").click();
+          });
+          document.querySelector("#files").addEventListener("change", function (event) {
+            addFiles(event.target.files);
+            event.target.value = "";
+          });
+          const drop = document.querySelector("#drop");
+          drop.addEventListener("dragover", function (event) {
             event.preventDefault();
-            statusEl.textContent = "Generating. A 1024 image can take about one minute.";
-            img.removeAttribute("src");
-            const body = {
-              model: "Qwen/Qwen-Image-2.1",
+            drop.classList.add("over");
+          });
+          drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+          drop.addEventListener("drop", function (event) {
+            event.preventDefault();
+            drop.classList.remove("over");
+            addFiles(event.dataTransfer.files);
+          });
+
+          function settings() {
+            const negative = document.querySelector("#negative").value.trim();
+            return {
               prompt: document.querySelector("#prompt").value,
               size: document.querySelector("#size").value,
-              num_inference_steps: Number(document.querySelector("#steps").value),
-              true_cfg_scale: 1.0
+              steps: String(document.querySelector("#steps").value),
+              seed: document.querySelector("#seed").value.trim(),
+              negative: negative,
+              cfg: negative ? "4.0" : "1.0"
             };
-            const seed = document.querySelector("#seed").value.trim();
-            if (seed !== "") body.seed = Number(seed);
-            const response = await fetch("/v1/images/generations", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body)
-            });
-            const data = await response.json();
-            if (!response.ok) {
-              const message = (data.error && data.error.message) || data.detail || JSON.stringify(data);
-              statusEl.textContent = message;
-              return;
+          }
+
+          function errorText(data) {
+            return (data.error && data.error.message) || data.detail || JSON.stringify(data);
+          }
+
+          function showPicture(url, prompt) {
+            currentUrl = url;
+            result.src = url;
+            result.alt = prompt;
+            downloadBtn.disabled = false;
+            useResultBtn.disabled = false;
+            const button = document.createElement("button");
+            button.type = "button";
+            const image = document.createElement("img");
+            image.src = url;
+            image.alt = prompt;
+            button.append(image);
+            button.addEventListener("click", function () { showPicture(url, prompt); });
+            historyEl.prepend(button);
+            while (historyEl.children.length > 8) historyEl.lastElementChild.remove();
+          }
+
+          document.querySelector("#form").addEventListener("submit", async function (event) {
+            event.preventDefault();
+            const values = settings();
+            go.disabled = true;
+            const started = Date.now();
+            const timer = setInterval(function () {
+              statusEl.textContent = "Generating. " + Math.round((Date.now() - started) / 1000) + " s";
+            }, 500);
+            try {
+              let response;
+              if (refs.length) {
+                const form = new FormData();
+                refs.forEach(function (item) { form.append("image", item.file); });
+                form.append("model", "Qwen/Qwen-Image-2.1");
+                form.append("prompt", values.prompt);
+                form.append("size", values.size);
+                form.append("num_inference_steps", values.steps);
+                form.append("true_cfg_scale", values.cfg);
+                if (values.seed) form.append("seed", values.seed);
+                if (values.negative) form.append("negative_prompt", values.negative);
+                response = await fetch("/v1/images/edits", { method: "POST", body: form });
+              } else {
+                const body = {
+                  model: "Qwen/Qwen-Image-2.1",
+                  prompt: values.prompt,
+                  size: values.size,
+                  num_inference_steps: Number(values.steps),
+                  true_cfg_scale: Number(values.cfg)
+                };
+                if (values.seed) body.seed = Number(values.seed);
+                if (values.negative) body.negative_prompt = values.negative;
+                response = await fetch("/v1/images/generations", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(body)
+                });
+              }
+              const data = await response.json();
+              if (!response.ok) {
+                statusEl.textContent = errorText(data);
+                return;
+              }
+              const item = data.data && data.data[0];
+              const url = item && item.b64_json
+                ? "data:image/png;base64," + item.b64_json
+                : (item && item.url) || "";
+              if (!url) {
+                statusEl.textContent = "The server returned no image.";
+                return;
+              }
+              showPicture(url, values.prompt);
+              statusEl.textContent = "Done.";
+            } catch (error) {
+              statusEl.textContent = "The request failed. The model may still be loading.";
+            } finally {
+              clearInterval(timer);
+              go.disabled = false;
             }
-            const picture = data.data && data.data[0] && data.data[0].b64_json;
-            if (!picture) {
-              statusEl.textContent = "The server returned no image.";
-              return;
+          });
+
+          downloadBtn.addEventListener("click", function () {
+            const link = document.createElement("a");
+            link.href = currentUrl;
+            link.download = "qwen-image-2.1.png";
+            link.click();
+          });
+
+          useResultBtn.addEventListener("click", async function () {
+            const response = await fetch(currentUrl);
+            const blob = await response.blob();
+            addFiles([new File([blob], "result.png", { type: blob.type || "image/png" })]);
+          });
+
+          document.addEventListener("keydown", function (event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              document.querySelector("#form").requestSubmit();
             }
-            img.src = "data:image/png;base64," + picture;
-            img.alt = body.prompt;
-            statusEl.textContent = "Done.";
           });
         </script>
       </body>

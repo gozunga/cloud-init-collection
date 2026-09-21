@@ -50,7 +50,7 @@ These configs target GPU instances (`ac.nvl40s1` or larger). NVIDIA drivers are 
 
 The text vLLM config uses `--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 --mm-encoder-tp-mode data`. Open WebUI connects to vLLM as an OpenAI-compatible backend and appears at `:3000` once vLLM passes its healthcheck.
 
-Qwen-Image-2.1 uses `vllm/vllm-omni:qwen-image21` and `vllm serve Qwen/Qwen-Image-2.1 --omni`. The first start downloads about 33 GB. Open `:3000` in a browser, type a prompt, and press Generate. The API remains at `POST /v1/images/generations`. The Qwen Research License covers this model.
+Qwen-Image-2.1 uses `vllm/vllm-omni:qwen-image21` and `vllm serve Qwen/Qwen-Image-2.1 --omni`. The first start downloads about 33 GB. Open `:3000`, type a prompt, and press Generate. You can attach up to four reference images. The API remains at `POST /v1/images/generations`, and edits use `POST /v1/images/edits`. The Qwen Research License covers this model.
 
 ### AI dev tools
 
