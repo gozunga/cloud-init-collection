@@ -6,7 +6,7 @@
 # and brings up vLLM-Omni via Docker Compose.
 #
 # vLLM-Omni pulls one Hugging Face repository and serves an OpenAI-compatible
-# image API on port 8000.
+# image API on port 8000. A small web page on port 3000 sends prompts to that API.
 #
 # Model: Qwen/Qwen-Image-2.1
 # https://huggingface.co/Qwen/Qwen-Image-2.1
@@ -27,6 +27,7 @@
 # Allow 10-20 minutes after the driver reboot before :8000/health is ready.
 #
 # After boot (including driver reboot):
+#   Browser:   http://<server-ip>:3000
 #   Image API: http://<server-ip>:8000/v1/images/generations
 #
 # Example:
@@ -36,6 +37,7 @@
 #
 # Required security group ports:
 #   - 22   (SSH — management)
+#   - 3000 (image page)
 #   - 8000 (vLLM-Omni image API)
 #
 # Recommended: ac.nvl40s1 (48 GB L40S) or larger
@@ -121,8 +123,142 @@ write_files:
             retries: 20
             start_period: 600s
 
+        web:
+          image: nginx:1.30.5-alpine
+          container_name: qwen-image-web
+          restart: unless-stopped
+          ports:
+            - "3000:3000"
+          volumes:
+            - ./web/index.html:/usr/share/nginx/html/index.html:ro
+            - ./web/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+          depends_on:
+            - vllm
+
       volumes:
         huggingface:
+
+  - path: /opt/vllm/web/nginx.conf
+    permissions: '0644'
+    content: |
+      server {
+          listen 3000;
+          server_name _;
+          root /usr/share/nginx/html;
+
+          location / {
+              try_files $uri /index.html;
+          }
+
+          location = /health {
+              proxy_pass http://vllm:8000/health;
+              proxy_read_timeout 30s;
+          }
+
+          location /v1/ {
+              proxy_pass http://vllm:8000;
+              proxy_http_version 1.1;
+              proxy_read_timeout 600s;
+              proxy_send_timeout 600s;
+          }
+      }
+
+  - path: /opt/vllm/web/index.html
+    permissions: '0644'
+    content: |
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Qwen-Image-2.1</title>
+        <style>
+          body { font-family: sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+          label { display: block; margin-top: 1rem; }
+          textarea, select, input, button { font: inherit; }
+          textarea { width: 100%; min-height: 8rem; }
+          button { margin-top: 1rem; padding: 0.4rem 1rem; }
+          img { max-width: 100%; margin-top: 1rem; }
+          #status, #health { margin-top: 1rem; }
+        </style>
+      </head>
+      <body>
+        <h1>Qwen-Image-2.1</h1>
+        <p id="health">Checking the model.</p>
+        <form id="form">
+          <label>Prompt
+            <textarea id="prompt" required>A ceramic teapot on a wooden table</textarea>
+          </label>
+          <label>Size
+            <select id="size">
+              <option value="1024x1024">1024 x 1024</option>
+              <option value="1280x720">1280 x 720</option>
+              <option value="720x1280">720 x 1280</option>
+            </select>
+          </label>
+          <label>Steps
+            <input id="steps" type="number" min="1" max="80" value="40">
+          </label>
+          <label>Seed (optional)
+            <input id="seed" type="number" min="0">
+          </label>
+          <button type="submit">Generate</button>
+        </form>
+        <p id="status"></p>
+        <img id="result" alt="">
+        <script>
+          const health = document.querySelector("#health");
+          const statusEl = document.querySelector("#status");
+          const img = document.querySelector("#result");
+
+          async function checkHealth() {
+            try {
+              const response = await fetch("/health");
+              health.textContent = response.ok ? "The model is ready." : "The model is still loading. Wait, then try again.";
+            } catch (error) {
+              health.textContent = "The model is still loading. Wait, then try again.";
+            }
+          }
+
+          checkHealth();
+          setInterval(checkHealth, 10000);
+
+          document.querySelector("#form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            statusEl.textContent = "Generating. A 1024 image can take about one minute.";
+            img.removeAttribute("src");
+            const body = {
+              model: "Qwen/Qwen-Image-2.1",
+              prompt: document.querySelector("#prompt").value,
+              size: document.querySelector("#size").value,
+              num_inference_steps: Number(document.querySelector("#steps").value),
+              true_cfg_scale: 1.0
+            };
+            const seed = document.querySelector("#seed").value.trim();
+            if (seed !== "") body.seed = Number(seed);
+            const response = await fetch("/v1/images/generations", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              const message = (data.error && data.error.message) || data.detail || JSON.stringify(data);
+              statusEl.textContent = message;
+              return;
+            }
+            const picture = data.data && data.data[0] && data.data[0].b64_json;
+            if (!picture) {
+              statusEl.textContent = "The server returned no image.";
+              return;
+            }
+            img.src = "data:image/png;base64," + picture;
+            img.alt = body.prompt;
+            statusEl.textContent = "Done.";
+          });
+        </script>
+      </body>
+      </html>
 
   - path: /etc/systemd/system/vllm-qwen-image.service
     permissions: '0644'
@@ -196,4 +332,5 @@ power_state:
 final_message: |
   NVIDIA drivers installed. Rebooting to load the kernel module.
   After reboot, vLLM-Omni downloads Qwen/Qwen-Image-2.1 (about 33 GB).
+  Browser:   http://<server-ip>:3000
   Image API: http://<server-ip>:8000/v1/images/generations
