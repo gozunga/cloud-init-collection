@@ -46,8 +46,11 @@ These configs target GPU instances (`ac.nvl40s1` or larger). NVIDIA drivers are 
 |------|---------|----------|-------|
 | [`ai/ubuntu-vllm-openwebui.yaml`](./ai/ubuntu-vllm-openwebui.yaml) | [vLLM](https://vllm.ai) serving **Qwen3.6-27B-FP8** + [Open WebUI](https://openwebui.com) | 40 GB+ (L40S) | `8000` (vLLM API), `3000` (WebUI) |
 | [`ai/ubuntu-ollama-openwebui.yaml`](./ai/ubuntu-ollama-openwebui.yaml) | [Ollama](https://ollama.com) + [Open WebUI](https://openwebui.com) — pull any model after boot | 40 GB+ | `11434` (Ollama API), `3000` (WebUI) |
+| [`ai/ubuntu-vllm-qwen-image-21.yaml`](./ai/ubuntu-vllm-qwen-image-21.yaml) | [vLLM-Omni](https://github.com/vllm-project/vllm-omni) serving **[Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)** (one model pull) | 48 GB (L40S) | `8000` (image API) |
 
-The vLLM config uses `--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 --mm-encoder-tp-mode data`. Open WebUI connects to vLLM as an OpenAI-compatible backend and appears at `:3000` once vLLM passes its healthcheck.
+The text vLLM config uses `--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 --mm-encoder-tp-mode data`. Open WebUI connects to vLLM as an OpenAI-compatible backend and appears at `:3000` once vLLM passes its healthcheck.
+
+Qwen-Image-2.1 uses `vllm/vllm-omni:qwen-image21` and `vllm serve Qwen/Qwen-Image-2.1 --omni`. The first start downloads about 33 GB. Send prompts to `POST /v1/images/generations`. The Qwen Research License covers this model.
 
 ### AI dev tools
 
