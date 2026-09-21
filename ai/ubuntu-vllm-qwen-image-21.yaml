@@ -20,6 +20,8 @@
 # Recommended: ac.nvl40s1 (48 GB L40S) or larger.
 #
 # License: Qwen Research License. Commercial use needs a separate agreement.
+# For gated models (Llama, Mistral, etc.), uncomment HF_TOKEN
+# in /opt/vllm/.env and add your token before starting the service.
 #
 # Note: first startup downloads the model (about 33 GB).
 # Allow 10-20 minutes after the driver reboot before :8000/health is ready.
@@ -74,6 +76,12 @@ write_files:
       alias nouveau off
       alias lbm-nouveau off
 
+  - path: /opt/vllm/.env
+    permissions: '0600'
+    content: |
+      # Uncomment and set your HuggingFace token for gated models (Llama, Mistral, etc.)
+      # HF_TOKEN=hf_your_token_here
+
   - path: /opt/vllm/docker-compose.yml
     permissions: '0644'
     content: |
@@ -86,6 +94,7 @@ write_files:
             - "8000:8000"
           volumes:
             - huggingface:/root/.cache/huggingface
+          env_file: .env
           # One model id. vLLM-Omni downloads Qwen/Qwen-Image-2.1 on first start.
           # https://huggingface.co/Qwen/Qwen-Image-2.1
           command:
